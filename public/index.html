@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>拖鞋賣場</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">LINE Slipper Shop</p>
+        <h1>拖鞋賣場</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="cart-link" href="/cart.html">購物車 <span id="cartCount">0</span></a>
+        <a class="admin-link" href="/admin.html">後台</a>
+      </nav>
+    </header>
+
+    <main class="shop-layout">
+      <section class="catalog-panel">
+        <div class="section-head">
+          <h2>選擇賣場</h2>
+          <select id="marketSelect"></select>
+        </div>
+        <p id="marketDescription" class="muted"></p>
+        <div id="products" class="product-grid"></div>
+        <p id="message" class="message"></p>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

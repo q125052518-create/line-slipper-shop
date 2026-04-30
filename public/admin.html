@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>拖鞋賣場後台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>拖鞋賣場後台</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-grid">
+        <form id="marketForm" class="editor-panel">
+          <h2>新增賣場</h2>
+          <label>
+            賣場名稱
+            <input name="name" required>
+          </label>
+          <label>
+            賣場說明
+            <textarea name="description" rows="3"></textarea>
+          </label>
+          <label>
+            賣場封面圖
+            <span class="image-uploader">
+              <span class="image-preview empty" data-image-preview>尚未上傳</span>
+              <input type="file" name="imageFile" accept="image/*">
+              <input type="hidden" name="imageUrl">
+              <button type="button" data-clear-image>刪除圖片</button>
+            </span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" name="isActive" checked>
+            前台顯示
+          </label>
+          <button type="submit">新增賣場</button>
+        </form>
+
+        <section class="editor-panel">
+          <h2>新增商品</h2>
+          <form id="productForm" class="order-form">
+            <label>
+              所屬賣場
+              <select name="marketId" required></select>
+            </label>
+            <label>
+              商品名稱
+              <input name="name" placeholder="例如 雲朵厚底拖鞋" required>
+            </label>
+          <label>
+            商品圖片
+            <span class="image-uploader">
+              <span class="image-preview empty" data-image-preview>尚未上傳</span>
+              <input type="file" name="imageFile" accept="image/*">
+              <input type="hidden" name="imageUrl">
+              <button type="button" data-clear-image>刪除圖片</button>
+            </span>
+          </label>
+            <label>
+              商品說明
+              <textarea name="description" rows="3"></textarea>
+            </label>
+            <div id="newVariants" class="variant-editor"></div>
+            <button type="button" data-add-variant>新增品項</button>
+            <button type="submit">新增商品</button>
+          </form>
+        </section>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>賣場與商品資料</h2>
+          <button type="button" id="refreshCatalog">重新整理</button>
+        </div>
+        <div id="catalogEditor" class="catalog-editor"></div>
+      </section>
+
+      <section class="editor-panel">
+        <h2>Excel 批量更改庫存</h2>
+        <form id="inventoryImportForm" class="order-form">
+          <label>
+            Excel 檔案
+            <input type="file" name="inventoryFile" accept=".xlsx,.xls" required>
+          </label>
+          <button type="submit">匯入更新庫存</button>
+          <p id="inventoryImportMessage" class="message"></p>
+        </form>
+      </section>
+
+      <section class="editor-panel">
+        <h2>Excel 大量上架</h2>
+        <p class="muted">欄位：賣場名稱、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。</p>
+        <a class="cart-link" href="/product-import-template.xlsx" download>下載上架範本</a>
+        <form id="productImportForm" class="order-form">
+          <label>
+            Excel 檔案
+            <input type="file" name="productFile" accept=".xlsx,.xls" required>
+          </label>
+          <button type="submit">匯入大量上架</button>
+          <p id="productImportMessage" class="message"></p>
+        </form>
+      </section>
+
+      <section>
+        <h2>訂單後台</h2>
+        <div id="orders" class="orders"></div>
+      </section>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>

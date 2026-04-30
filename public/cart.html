@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>購物車結帳</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Checkout</p>
+        <h1>購物車結帳</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="cart-link" href="/">繼續購物</a>
+        <a class="admin-link" href="/admin.html">後台</a>
+      </nav>
+    </header>
+
+    <main class="checkout-layout">
+      <section class="checkout">
+        <h2>購物車</h2>
+        <div id="cart" class="cart-list"></div>
+        <div class="total-row">
+          <span>總金額</span>
+          <strong id="total">NT$0</strong>
+        </div>
+      </section>
+
+      <section class="checkout">
+        <h2>結帳資料</h2>
+        <form id="orderForm" class="order-form">
+          <label>
+            姓名
+            <input name="customerName" autocomplete="name" required>
+          </label>
+          <label>
+            電話
+            <input name="phone" autocomplete="tel" required>
+          </label>
+          <label>
+            取貨方式
+            <select name="deliveryMethod" id="deliveryMethod" required>
+              <option value="">請選擇</option>
+              <option value="宅配">宅配</option>
+              <option value="自行取貨">自行取貨</option>
+            </select>
+          </label>
+          <label id="addressField" class="hidden">
+            宅配地址
+            <input name="deliveryAddress" id="deliveryAddress" autocomplete="street-address">
+          </label>
+          <label>
+            備註
+            <textarea name="note" rows="3" placeholder="尺寸需求、顏色備註、其他資訊"></textarea>
+          </label>
+          <button type="submit">送出訂單</button>
+          <p id="message" class="message"></p>
+        </form>
+      </section>
+    </main>
+
+    <script src="/cart.js"></script>
+  </body>
+</html>

@@ -1,0 +1,69 @@
+{
+  "markets": [
+    {
+      "id": "summer-sale",
+      "name": "夏季拖鞋賣場",
+      "description": "涼感、防滑、日常好穿的拖鞋款式。",
+      "isActive": true,
+      "products": [
+        {
+          "id": "cloud-slide",
+          "name": "雲朵厚底拖鞋",
+          "imageUrl": "https://images.unsplash.com/photo-1603487742131-4160ec999306?auto=format&fit=crop&w=900&q=80",
+          "description": "柔軟厚底，適合居家與外出。",
+          "variants": [
+            {
+              "id": "cloud-white-24",
+              "name": "白色 / 24cm",
+              "barcode": "SLP-CW-24",
+              "imageUrl": "https://images.unsplash.com/photo-1603487742131-4160ec999306?auto=format&fit=crop&w=900&q=80",
+              "price": 390,
+              "stock": 20
+            },
+            {
+              "id": "cloud-white-25",
+              "name": "白色 / 25cm",
+              "barcode": "SLP-CW-25",
+              "imageUrl": "https://images.unsplash.com/photo-1603487742131-4160ec999306?auto=format&fit=crop&w=900&q=80",
+              "price": 390,
+              "stock": 20
+            },
+            {
+              "id": "cloud-black-26",
+              "name": "黑色 / 26cm",
+              "barcode": "SLP-CB-26",
+              "imageUrl": "https://images.unsplash.com/photo-1603487742131-4160ec999306?auto=format&fit=crop&w=900&q=80",
+              "price": 390,
+              "stock": 5
+            }
+          ]
+        },
+        {
+          "id": "beach-basic",
+          "name": "海灘防滑拖鞋",
+          "imageUrl": "https://images.unsplash.com/photo-1562273138-f46be4ebdf33?auto=format&fit=crop&w=900&q=80",
+          "description": "輕量止滑，適合浴室、泳池與海邊。",
+          "variants": [
+            {
+              "id": "beach-blue-m",
+              "name": "藍色 / M",
+              "barcode": "SLP-BL-M",
+              "imageUrl": "https://images.unsplash.com/photo-1562273138-f46be4ebdf33?auto=format&fit=crop&w=900&q=80",
+              "price": 250,
+              "stock": 20
+            },
+            {
+              "id": "beach-blue-l",
+              "name": "藍色 / L",
+              "barcode": "SLP-BL-L",
+              "imageUrl": "https://images.unsplash.com/photo-1562273138-f46be4ebdf33?auto=format&fit=crop&w=900&q=80",
+              "price": 250,
+              "stock": 14
+            }
+          ]
+        }
+      ],
+      "imageUrl": ""
+    }
+  ]
+}
