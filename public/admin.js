@@ -2,24 +2,9 @@ const catalogEditorEl = document.querySelector("#catalogEditor");
 const marketFormEl = document.querySelector("#marketForm");
 const productFormEl = document.querySelector("#productForm");
 const newVariantsEl = document.querySelector("#newVariants");
-const ordersEl = document.querySelector("#orders");
 const refreshCatalogEl = document.querySelector("#refreshCatalog");
-const inventoryImportFormEl = document.querySelector("#inventoryImportForm");
-const inventoryImportMessageEl = document.querySelector("#inventoryImportMessage");
-const productImportFormEl = document.querySelector("#productImportForm");
-const productImportMessageEl = document.querySelector("#productImportMessage");
-const logoutButtonEl = document.querySelector("#logoutButton");
 
 let catalog = { markets: [] };
-
-const statusLabels = {
-  pending: "待確認",
-  accepted: "已接單",
-  packing: "包裝中",
-  shipped: "已出貨",
-  completed: "已完成",
-  cancelled: "已取消"
-};
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -30,8 +15,13 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function formatMoney(value) {
-  return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 async function collectVariantsWithImages(container) {
@@ -198,44 +188,6 @@ async function loadCatalog() {
   renderCatalog();
 }
 
-async function loadOrders() {
-  const data = await fetch("/api/orders").then((response) => response.json());
-
-  if (data.orders.length === 0) {
-    ordersEl.innerHTML = '<p class="empty">目前沒有訂單</p>';
-    return;
-  }
-
-  ordersEl.innerHTML = data.orders.map((order) => `
-    <article class="order">
-      <div class="order-head">
-        <div>
-          <h3>${escapeHtml(order.id)}</h3>
-          <p>${new Date(order.createdAt).toLocaleString("zh-TW")}</p>
-        </div>
-        <select data-order-status="${order.id}">
-          ${Object.entries(statusLabels).map(([value, label]) => `
-            <option value="${value}" ${order.status === value ? "selected" : ""}>${label}</option>
-          `).join("")}
-        </select>
-      </div>
-      <dl>
-        <div><dt>姓名</dt><dd>${escapeHtml(order.customerName || "-")}</dd></div>
-        <div><dt>電話</dt><dd>${escapeHtml(order.phone || "-")}</dd></div>
-        <div><dt>取貨</dt><dd>${escapeHtml(order.deliveryMethod || "-")}</dd></div>
-        <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
-        <div><dt>金額</dt><dd>${formatMoney(order.totalAmount)}</dd></div>
-      </dl>
-      <ul>
-        ${order.items.map((item) => `
-          <li>${escapeHtml(item.marketName)} / ${escapeHtml(item.productName)} / ${escapeHtml(item.variantName)} / ${escapeHtml(item.barcode)} x ${item.quantity}，${formatMoney(item.subtotal)}</li>
-        `).join("")}
-      </ul>
-      ${order.note ? `<p class="note">備註：${escapeHtml(order.note)}</p>` : ""}
-    </article>
-  `).join("");
-}
-
 marketFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(marketFormEl);
@@ -359,101 +311,18 @@ document.addEventListener("submit", async (event) => {
 });
 
 document.addEventListener("change", async (event) => {
-  if (event.target.matches('.image-uploader input[type="file"]')) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const uploader = event.target.closest(".image-uploader");
-    const dataUrl = await readFileAsDataUrl(file);
-    uploader.querySelector('input[type="hidden"]').value = dataUrl;
-    uploader.querySelector("[data-image-preview]").outerHTML =
-      `<span class="image-preview" data-image-preview><img src="${dataUrl}" alt=""></span>`;
-    return;
-  }
+  if (!event.target.matches('.image-uploader input[type="file"]')) return;
 
-  const orderId = event.target.dataset.orderStatus;
-  if (!orderId) return;
-
-  await fetch(`/api/orders/${orderId}/status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: event.target.value })
-  });
+  const file = event.target.files[0];
+  if (!file) return;
+  const uploader = event.target.closest(".image-uploader");
+  const dataUrl = await readFileAsDataUrl(file);
+  uploader.querySelector('input[type="hidden"]').value = dataUrl;
+  uploader.querySelector("[data-image-preview]").outerHTML =
+    `<span class="image-preview" data-image-preview><img src="${dataUrl}" alt=""></span>`;
 });
 
 refreshCatalogEl.addEventListener("click", loadCatalog);
 
-logoutButtonEl.addEventListener("click", async () => {
-  await fetch("/api/auth/logout", { method: "POST" });
-  window.location.href = "/login.html";
-});
-
-inventoryImportFormEl.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  inventoryImportMessageEl.textContent = "匯入中...";
-
-  const file = inventoryImportFormEl.elements.inventoryFile.files[0];
-  if (!file) {
-    inventoryImportMessageEl.textContent = "請選擇 Excel 檔案";
-    return;
-  }
-
-  const fileBase64 = await readFileAsDataUrl(file);
-  const response = await fetch("/api/admin/inventory/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileBase64 })
-  });
-  const data = await response.json();
-
-  if (!response.ok) {
-    inventoryImportMessageEl.textContent = data.message || "匯入失敗";
-    return;
-  }
-
-  const unmatched = data.unmatched?.length ? `，找不到 ${data.unmatched.length} 筆：${data.unmatched.join(", ")}` : "";
-  inventoryImportMessageEl.textContent = `已更新 ${data.updatedCount} 筆庫存${unmatched}`;
-  inventoryImportFormEl.reset();
-  await loadCatalog();
-});
-
-productImportFormEl.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  productImportMessageEl.textContent = "匯入中...";
-
-  const file = productImportFormEl.elements.productFile.files[0];
-  if (!file) {
-    productImportMessageEl.textContent = "請選擇 Excel 檔案";
-    return;
-  }
-
-  const fileBase64 = await readFileAsDataUrl(file);
-  const response = await fetch("/api/admin/products/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileBase64 })
-  });
-  const data = await response.json();
-
-  if (!response.ok) {
-    productImportMessageEl.textContent = data.message || "匯入失敗";
-    return;
-  }
-
-  productImportMessageEl.textContent =
-    `匯入 ${data.importedRows} 列，新增賣場 ${data.createdMarkets} 個，新增商品 ${data.createdProducts} 個，新增品項 ${data.createdVariants} 個，更新品項 ${data.updatedVariants} 個`;
-  productImportFormEl.reset();
-  await loadCatalog();
-});
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 newVariantsEl.innerHTML = variantRow();
 loadCatalog();
-loadOrders();

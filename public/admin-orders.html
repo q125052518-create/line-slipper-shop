@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>訂單後台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Orders</p>
+        <h1>訂單後台</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">商品管理</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link is-current" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section>
+        <div class="section-head">
+          <h2>訂單列表</h2>
+          <button type="button" id="refreshOrdersButton">重新整理</button>
+        </div>
+        <div id="orders" class="orders"></div>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-orders.js"></script>
+  </body>
+</html>

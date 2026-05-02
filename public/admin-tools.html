@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>匯入同步工具</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Tools</p>
+        <h1>匯入同步工具</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">商品管理</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link is-current" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="tools-grid">
+        <section class="editor-panel">
+          <h2>Excel 批量更改庫存</h2>
+          <form id="inventoryImportForm" class="order-form">
+            <label>
+              Excel 檔案
+              <input type="file" name="inventoryFile" accept=".xlsx,.xls" required>
+            </label>
+            <button type="submit">匯入更新庫存</button>
+            <p id="inventoryImportMessage" class="message"></p>
+          </form>
+        </section>
+
+        <section class="editor-panel">
+          <h2>Excel 大量上架</h2>
+          <p class="muted">欄位：賣場名稱、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。</p>
+          <a class="cart-link" href="/product-import-template.xlsx" download>下載上架範本</a>
+          <form id="productImportForm" class="order-form">
+            <label>
+              Excel 檔案
+              <input type="file" name="productFile" accept=".xlsx,.xls" required>
+            </label>
+            <button type="submit">匯入大量上架</button>
+            <p id="productImportMessage" class="message"></p>
+          </form>
+        </section>
+
+        <section class="editor-panel">
+          <h2>墨筆克線上同步庫存</h2>
+          <p class="muted">每小時會自動同步一次，也可以手動立即同步。庫存會用墨筆克匯出的可用庫存減掉需求。</p>
+          <button type="button" id="mallbicSyncButton">線上匯出並同步庫存</button>
+          <p id="mallbicSyncStatus" class="muted"></p>
+          <p id="mallbicSyncMessage" class="message"></p>
+        </section>
+
+        <section class="editor-panel">
+          <h2>墨筆克訂單同步</h2>
+          <p class="muted">把尚未匯入的新訂單轉成自建單 Excel 上傳墨筆克；後台改成已取消的訂單，會同步到墨筆克買家取消。</p>
+          <button type="button" id="mallbicOrderSyncButton">同步新訂單與取消訂單</button>
+          <p id="mallbicOrderSyncStatus" class="muted"></p>
+          <p id="mallbicOrderSyncMessage" class="message"></p>
+        </section>
+
+        <section class="editor-panel">
+          <h2>墨筆克訂單狀態更新</h2>
+          <p class="muted">只拿本系統的「新訂單」去墨筆克訂單管理搜尋，墨筆克狀態選「出貨中」。搜尋得到就把本系統狀態改成「處理中」。</p>
+          <button type="button" id="mallbicOrderStatusButton">更新新訂單狀態</button>
+          <p id="mallbicOrderStatusMessage" class="message"></p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-tools.js"></script>
+  </body>
+</html>

@@ -4,7 +4,8 @@ const state = {
   markets: [],
   currentMarketId: "",
   selectedVariants: {},
-  cart: readCart()
+  cart: readCart(),
+  buyer: null
 };
 
 const marketSelectEl = document.querySelector("#marketSelect");
@@ -20,6 +21,15 @@ async function loadMarkets() {
   renderMarketOptions();
   renderProducts();
   renderCartCount();
+}
+
+async function loadBuyerStatus() {
+  try {
+    const data = await fetch("/api/buyer/status").then((response) => response.json());
+    state.buyer = data.authenticated ? data.buyer : null;
+  } catch {
+    state.buyer = null;
+  }
 }
 
 function readCart() {
@@ -91,6 +101,7 @@ function renderProducts() {
     const selected = selectedVariant(product);
     const imageUrl = selected?.imageUrl || product.imageUrl || placeholderImage(product.name);
     const disabled = !selected || selected.stock <= 0;
+    const loginRequired = !state.buyer;
 
     return `
       <article class="product">
@@ -125,9 +136,9 @@ function renderProducts() {
           <p class="stock-line" data-stock-line="${product.id}">庫存：${selected?.stock ?? 0}</p>
           <label class="quantity-field">
             數量
-            <input type="number" min="1" max="${selected?.stock || 1}" value="1" data-add-quantity="${product.id}" ${disabled ? "disabled" : ""}>
+            <input type="number" min="1" max="${selected?.stock || 1}" value="1" data-add-quantity="${product.id}" ${disabled || loginRequired ? "disabled" : ""}>
           </label>
-          <button type="button" data-add-product="${product.id}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : "加入購物車"}</button>
+          <button type="button" data-add-product="${product.id}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : loginRequired ? "登入後加入購物車" : "加入購物車"}</button>
         </div>
       </article>
     `;
@@ -139,6 +150,12 @@ function cartKey(marketId, productId, variantId) {
 }
 
 function addToCart(productId) {
+  if (!state.buyer) {
+    messageEl.textContent = "請先登入買家帳號才能加入購物車";
+    window.location.href = "/orders.html";
+    return;
+  }
+
   const market = currentMarket();
   const product = market?.products.find((entry) => entry.id === productId);
   const variant = product ? selectedVariant(product) : null;
@@ -194,4 +211,4 @@ document.addEventListener("click", (event) => {
   if (productId) addToCart(productId);
 });
 
-loadMarkets();
+loadBuyerStatus().finally(loadMarkets);

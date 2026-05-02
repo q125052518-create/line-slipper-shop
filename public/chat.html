@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>聊聊</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Chat</p>
+        <h1>聊聊</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="cart-link" href="/">商品頁</a>
+        <a class="cart-link" href="/cart.html">購物車</a>
+        <a class="cart-link" href="/orders.html">我的訂單</a>
+        <button class="hidden" data-buyer-logout type="button">登出</button>
+        <a class="admin-link hidden" data-admin-link href="/admin.html">後台</a>
+      </nav>
+    </header>
+
+    <main class="chat-page">
+      <section class="chat-panel">
+        <div class="section-head">
+          <div>
+            <h2>與賣家聊聊</h2>
+            <p id="chatBuyerSummary" class="muted">載入中...</p>
+          </div>
+          <button id="refreshChatButton" type="button">重新整理</button>
+        </div>
+
+        <div id="chatMessages" class="chat-messages"></div>
+
+        <form id="buyerChatForm" class="chat-form">
+          <textarea name="text" rows="3" placeholder="輸入訊息..." required></textarea>
+          <button type="submit">送出</button>
+        </form>
+        <p id="chatMessage" class="message"></p>
+      </section>
+    </main>
+
+    <script src="/header.js"></script>
+    <script src="/chat.js"></script>
+  </body>
+</html>

@@ -15,7 +15,10 @@
       </div>
       <nav class="header-actions">
         <a class="cart-link" href="/">繼續購物</a>
-        <a class="admin-link" href="/admin.html">後台</a>
+        <a class="cart-link" href="/orders.html">我的訂單</a>
+        <a class="cart-link hidden" data-buyer-chat href="/chat.html">聊聊</a>
+        <button class="hidden" data-buyer-logout type="button">登出</button>
+        <a class="admin-link hidden" data-admin-link href="/admin.html">後台</a>
       </nav>
     </header>
 
@@ -62,6 +65,7 @@
       </section>
     </main>
 
+    <script src="/header.js"></script>
     <script src="/cart.js"></script>
   </body>
 </html>

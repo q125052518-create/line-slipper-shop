@@ -3,16 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>拖鞋賣場後台</title>
+    <title>商品賣場管理</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header class="app-header">
       <div>
         <p class="eyebrow">Admin</p>
-        <h1>拖鞋賣場後台</h1>
+        <h1>商品賣場管理</h1>
       </div>
       <nav class="header-actions">
+        <a class="admin-link is-current" href="/admin.html">商品管理</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
         <a class="admin-link" href="/">下單頁</a>
         <button type="button" id="logoutButton">登出</button>
       </nav>
@@ -57,15 +61,15 @@
               商品名稱
               <input name="name" placeholder="例如 雲朵厚底拖鞋" required>
             </label>
-          <label>
-            商品圖片
-            <span class="image-uploader">
-              <span class="image-preview empty" data-image-preview>尚未上傳</span>
-              <input type="file" name="imageFile" accept="image/*">
-              <input type="hidden" name="imageUrl">
-              <button type="button" data-clear-image>刪除圖片</button>
-            </span>
-          </label>
+            <label>
+              商品圖片
+              <span class="image-uploader">
+                <span class="image-preview empty" data-image-preview>尚未上傳</span>
+                <input type="file" name="imageFile" accept="image/*">
+                <input type="hidden" name="imageUrl">
+                <button type="button" data-clear-image>刪除圖片</button>
+              </span>
+            </label>
             <label>
               商品說明
               <textarea name="description" rows="3"></textarea>
@@ -84,39 +88,9 @@
         </div>
         <div id="catalogEditor" class="catalog-editor"></div>
       </section>
-
-      <section class="editor-panel">
-        <h2>Excel 批量更改庫存</h2>
-        <form id="inventoryImportForm" class="order-form">
-          <label>
-            Excel 檔案
-            <input type="file" name="inventoryFile" accept=".xlsx,.xls" required>
-          </label>
-          <button type="submit">匯入更新庫存</button>
-          <p id="inventoryImportMessage" class="message"></p>
-        </form>
-      </section>
-
-      <section class="editor-panel">
-        <h2>Excel 大量上架</h2>
-        <p class="muted">欄位：賣場名稱、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。</p>
-        <a class="cart-link" href="/product-import-template.xlsx" download>下載上架範本</a>
-        <form id="productImportForm" class="order-form">
-          <label>
-            Excel 檔案
-            <input type="file" name="productFile" accept=".xlsx,.xls" required>
-          </label>
-          <button type="submit">匯入大量上架</button>
-          <p id="productImportMessage" class="message"></p>
-        </form>
-      </section>
-
-      <section>
-        <h2>訂單後台</h2>
-        <div id="orders" class="orders"></div>
-      </section>
     </main>
 
+    <script src="/admin-common.js"></script>
     <script src="/admin.js"></script>
   </body>
 </html>

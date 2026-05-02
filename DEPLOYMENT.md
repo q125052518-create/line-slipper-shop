@@ -25,7 +25,7 @@ admin123
 4. Build Command 使用：
 
 ```bash
-npm install
+npm install && npx playwright install chromium
 ```
 
 5. Start Command 使用：
@@ -42,7 +42,19 @@ SESSION_SECRET=一串很長的隨機字
 LINE_CHANNEL_SECRET=LINE 後台的 Channel Secret
 LINE_CHANNEL_ACCESS_TOKEN=LINE 後台的 Channel Access Token
 LIFF_ID=LINE LIFF ID
+PLAYWRIGHT_BROWSERS_PATH=0
+MALLBIC_ACCOUNT=墨筆克帳號
+MALLBIC_PASSWORD=墨筆克密碼
+MALLBIC_COMPANY_NAME=祥瑞華有限公司
+MALLBIC_AUTO_SYNC_ENABLED=true
+MALLBIC_AUTO_SYNC_INTERVAL_MS=3600000
+MALLBIC_ORDER_AUTO_SYNC_ENABLED=false
+MALLBIC_ORDER_AUTO_SYNC_INTERVAL_MS=300000
 ```
+
+`MALLBIC_ACCOUNT` 和 `MALLBIC_PASSWORD` 是給後台「墨筆克線上同步庫存」與「墨筆克訂單同步」使用，不要放在前台或 GitHub 程式碼裡。
+
+`MALLBIC_ORDER_AUTO_SYNC_ENABLED=false` 代表訂單不會自動上傳客資到墨筆克，只能在後台手動按同步。確認要正式自動送單後，再改成 `true`。
 
 ## 重要限制
 

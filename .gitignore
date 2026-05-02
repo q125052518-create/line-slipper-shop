@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.env
+data/buyers.json
+data/chats.json
+data/mallbic-order-sync.json
+data/mallbic-sync.json
+data/orders.json

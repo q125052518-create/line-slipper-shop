@@ -3,7 +3,8 @@ const CART_KEY = "line-slipper-cart";
 const state = {
   markets: [],
   cart: readCart(),
-  lineUserId: "guest"
+  lineUserId: "guest",
+  buyer: null
 };
 
 const cartEl = document.querySelector("#cart");
@@ -33,6 +34,23 @@ async function loadMarkets() {
   state.markets = data.markets;
   refreshCartFromCatalog();
   renderCart();
+}
+
+async function loadBuyerStatus() {
+  try {
+    const data = await fetch("/api/buyer/status").then((response) => response.json());
+    state.buyer = data.authenticated ? data.buyer : null;
+    if (state.buyer) {
+      if (formEl.elements.customerName && !formEl.elements.customerName.value) {
+        formEl.elements.customerName.value = state.buyer.name || "";
+      }
+      if (formEl.elements.phone && !formEl.elements.phone.value) {
+        formEl.elements.phone.value = state.buyer.phone || "";
+      }
+    }
+  } catch {
+    state.buyer = null;
+  }
 }
 
 function readCart() {
@@ -97,15 +115,20 @@ function refreshCartFromCatalog() {
 
 function renderCart() {
   const items = Object.entries(state.cart);
+  const submitButton = formEl.querySelector('button[type="submit"]');
 
   if (items.length === 0) {
     cartEl.innerHTML = '<p class="empty">購物車是空的，請先回賣場加入商品。</p>';
     totalEl.textContent = formatMoney(0);
-    formEl.querySelector('button[type="submit"]').disabled = true;
+    submitButton.disabled = true;
     return;
   }
 
-  formEl.querySelector('button[type="submit"]').disabled = false;
+  submitButton.disabled = !state.buyer;
+  if (!state.buyer) {
+    messageEl.textContent = "請先登入買家帳號才能結帳";
+  }
+
   cartEl.innerHTML = items.map(([key, item]) => `
     <div class="cart-item cart-item-full">
       <img class="cart-thumb" src="${escapeHtml(item.imageUrl || placeholderImage(item.productName))}" alt="${escapeHtml(item.variantName)}">
@@ -176,6 +199,12 @@ formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   messageEl.textContent = "";
 
+  if (!state.buyer) {
+    messageEl.textContent = "請先登入買家帳號才能結帳";
+    window.location.href = "/orders.html";
+    return;
+  }
+
   const items = Object.values(state.cart).map((item) => ({
     marketId: item.marketId,
     productId: item.productId,
@@ -210,12 +239,17 @@ formEl.addEventListener("submit", async (event) => {
     return;
   }
 
+  localStorage.setItem("line-slipper-order-phone", String(formData.get("phone") || ""));
+  localStorage.setItem("line-slipper-last-order-id", data.order.id);
   clearCart();
   formEl.reset();
   updateDeliveryAddressVisibility();
   renderCart();
-  messageEl.textContent = data.summary;
+  messageEl.textContent = `${data.summary}\n可到「我的訂單」查詢或取消訂單。`;
 });
 
 updateDeliveryAddressVisibility();
-initLiff().finally(loadMarkets);
+initLiff().finally(async () => {
+  await loadBuyerStatus();
+  await loadMarkets();
+});

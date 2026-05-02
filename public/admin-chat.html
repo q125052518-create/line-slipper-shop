@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>買家聊聊</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Chat</p>
+        <h1>買家聊聊</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">商品管理</a>
+        <a class="admin-link is-current" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="editor-panel admin-chat-panel">
+        <div class="section-head">
+          <div>
+            <h2>買家聊聊</h2>
+            <p class="muted">賣家端會顯示未讀數與賣家訊息的已讀/未讀，買家端不顯示讀取狀態。</p>
+          </div>
+          <button type="button" id="refreshChatsButton">重新整理</button>
+        </div>
+        <div class="admin-chat-layout">
+          <div id="chatList" class="admin-chat-list"></div>
+          <div class="admin-chat-thread">
+            <div id="chatThreadHead" class="admin-chat-thread-head">
+              <p class="empty">請選擇一個買家對話</p>
+            </div>
+            <div id="chatThreadMessages" class="chat-messages admin-chat-messages"></div>
+            <form id="sellerChatForm" class="chat-form hidden">
+              <textarea name="text" rows="3" placeholder="輸入回覆..." required></textarea>
+              <button type="submit">回覆</button>
+            </form>
+            <p id="sellerChatMessage" class="message"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-chat.js"></script>
+  </body>
+</html>
