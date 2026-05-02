@@ -105,8 +105,8 @@ app.use(express.json({
 }));
 app.set("trust proxy", 1);
 app.post("/api/auth/login", (req, res) => {
-  const { password } = req.body;
-  if (String(password || "") !== adminPassword) {
+  const password = String(req.body?.password || "").trim();
+  if (password !== adminPassword) {
     return res.status(401).json({ message: "密碼不正確" });
   }
 
@@ -156,8 +156,13 @@ app.post("/api/buyer/register", async (req, res) => {
 
 app.post("/api/buyer/login", async (req, res) => {
   const loginAccount = String(req.body?.account ?? req.body?.phone ?? "").trim();
-  const loginPassword = String(req.body?.password || "");
-  if (loginAccount.toLowerCase() === adminAccount.toLowerCase() && loginPassword === adminPassword) {
+  const loginPassword = String(req.body?.password || "").trim();
+  const isAdminAccount = loginAccount.toLowerCase() === adminAccount.toLowerCase();
+  if (isAdminAccount) {
+    if (loginPassword !== adminPassword) {
+      return res.status(401).json({ message: "管理員密碼不正確" });
+    }
+
     res.setHeader("Set-Cookie", [
       buildSessionCookie(req, createSessionToken()),
       buildBuyerSessionCookie(req, "", 0)
