@@ -1,7 +1,7 @@
 const CART_KEY = "line-slipper-cart";
 const SEVEN_ELEVEN_METHOD = "7-11 賣貨便";
 const SEVEN_ELEVEN_SHIPPING_FEE = 38;
-const SEVEN_ELEVEN_MAP_URL = "https://emap.pcsc.com.tw/mobilemap/";
+const SEVEN_ELEVEN_MAP_URL = "https://www.ibon.com.tw/retail_inquiry.aspx";
 
 const state = {
   markets: [],
