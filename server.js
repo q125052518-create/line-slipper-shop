@@ -17,11 +17,11 @@ const sessionSecret = process.env.SESSION_SECRET || "dev-session-secret-change-m
 const sevenElevenDeliveryMethod = "7-11 賣貨便";
 const sevenElevenShippingFee = Number(process.env.SEVEN_ELEVEN_SHIPPING_FEE || 38);
 const sevenElevenFallbackMapUrl = "https://www.ibon.com.tw/retail_inquiry.aspx";
-const ecpayMerchantId = process.env.ECPAY_MERCHANT_ID || "";
-const ecpayHashKey = process.env.ECPAY_HASH_KEY || "";
-const ecpayHashIv = process.env.ECPAY_HASH_IV || "";
-const ecpayLogisticsMapUrl = process.env.ECPAY_LOGISTICS_MAP_URL || "https://logistics.ecpay.com.tw/Express/map";
-const ecpayLogisticsSubType = process.env.ECPAY_LOGISTICS_SUB_TYPE || "UNIMARTC2C";
+const ecpayMerchantId = String(process.env.ECPAY_MERCHANT_ID || "").trim();
+const ecpayHashKey = String(process.env.ECPAY_HASH_KEY || "").trim();
+const ecpayHashIv = String(process.env.ECPAY_HASH_IV || "").trim();
+const ecpayLogisticsMapUrl = String(process.env.ECPAY_LOGISTICS_MAP_URL || "https://logistics.ecpay.com.tw/Express/map").trim();
+const ecpayLogisticsSubType = String(process.env.ECPAY_LOGISTICS_SUB_TYPE || "UNIMARTC2C").trim();
 const channelSecret = process.env.LINE_CHANNEL_SECRET || "";
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 const dataDir = path.join(__dirname, "data");
@@ -546,6 +546,16 @@ function isEcpayMapEnabled() {
   return Boolean(ecpayMerchantId && ecpayHashKey && ecpayHashIv);
 }
 
+function missingEcpayMapKeys() {
+  return [
+    ["ECPAY_MERCHANT_ID", ecpayMerchantId],
+    ["ECPAY_HASH_KEY", ecpayHashKey],
+    ["ECPAY_HASH_IV", ecpayHashIv]
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+}
+
 function buildPublicUrl(req, pathname) {
   const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
   if (configuredBaseUrl) return `${configuredBaseUrl}${pathname}`;
@@ -1036,12 +1046,24 @@ app.get("/api/config", (_req, res) => {
   res.json({ liffId: process.env.LIFF_ID || "" });
 });
 
-app.post("/api/logistics/ecpay-map", requireBuyerApi, (req, res) => {
+app.get("/api/logistics/ecpay-map-status", (req, res) => {
+  const missingKeys = missingEcpayMapKeys();
+  res.json({
+    enabled: missingKeys.length === 0,
+    missingKeys,
+    logisticsSubType: ecpayLogisticsSubType,
+    replyUrl: buildPublicUrl(req, "/api/logistics/ecpay-store-callback")
+  });
+});
+
+app.post("/api/logistics/ecpay-map", (req, res) => {
+  const missingKeys = missingEcpayMapKeys();
   if (!isEcpayMapEnabled()) {
     return res.json({
       enabled: false,
+      missingKeys,
       fallbackUrl: sevenElevenFallbackMapUrl,
-      message: "尚未設定綠界電子地圖金鑰，先開啟 7-11 門市查詢備援。"
+      message: `Render 尚未讀到綠界電子地圖金鑰：${missingKeys.join("、")}。請確認已儲存後重新部署。`
     });
   }
 

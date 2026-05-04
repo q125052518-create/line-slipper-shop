@@ -181,11 +181,12 @@ async function openSevenElevenStoreSelector() {
       return;
     }
 
-    messageEl.textContent = data.message || "尚未設定綠界電子地圖，先開啟 7-11 門市查詢。";
-    window.open(data.fallbackUrl || SEVEN_ELEVEN_LOOKUP_URL, "_blank", "noopener");
+    const missingText = Array.isArray(data.missingKeys) && data.missingKeys.length
+      ? `（缺少 ${data.missingKeys.join("、")}）`
+      : "";
+    messageEl.textContent = data.message || `尚未設定綠界電子地圖${missingText}`;
   } catch {
-    messageEl.textContent = "電子地圖開啟失敗，先開啟 7-11 門市查詢。";
-    window.open(SEVEN_ELEVEN_LOOKUP_URL, "_blank", "noopener");
+    messageEl.textContent = "電子地圖開啟失敗，請稍後再試。";
   }
 }
 
