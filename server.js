@@ -21,7 +21,13 @@ const ecpayMerchantId = String(process.env.ECPAY_MERCHANT_ID || "").trim();
 const ecpayHashKey = String(process.env.ECPAY_HASH_KEY || "").trim();
 const ecpayHashIv = String(process.env.ECPAY_HASH_IV || "").trim();
 const ecpayLogisticsMapUrl = String(process.env.ECPAY_LOGISTICS_MAP_URL || "https://logistics.ecpay.com.tw/Express/map").trim();
+const ecpayLogisticsCreateUrl = String(process.env.ECPAY_LOGISTICS_CREATE_URL || "https://logistics.ecpay.com.tw/Express/Create").trim();
 const ecpayLogisticsSubType = String(process.env.ECPAY_LOGISTICS_SUB_TYPE || "UNIMARTC2C").trim();
+const ecpayLogisticsAutoCreateEnabled = parseEnvFlag(process.env.ECPAY_LOGISTICS_AUTO_CREATE_ENABLED, true);
+const ecpaySenderName = String(process.env.ECPAY_SENDER_NAME || "賣家").trim();
+const ecpaySenderCellPhone = String(process.env.ECPAY_SENDER_CELL_PHONE || process.env.ECPAY_SENDER_PHONE || "").replace(/\D/g, "");
+const ecpayReturnStoreId = String(process.env.ECPAY_RETURN_STORE_ID || "").trim();
+const ecpayIsCollection = parseEnvFlag(process.env.ECPAY_IS_COLLECTION, false) ? "Y" : "N";
 const channelSecret = process.env.LINE_CHANNEL_SECRET || "";
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 const dataDir = path.join(__dirname, "data");
@@ -351,6 +357,7 @@ function normalizeOrders(orders) {
     nextOrder.status = normalizeOrderStatus(nextOrder.status);
     nextOrder.cancelRequest = normalizeCancelRequest(nextOrder.cancelRequest);
     nextOrder.mallbic = normalizeOrderMallbicSync(nextOrder);
+    nextOrder.ecpayLogistics = normalizeOrderEcpayLogistics(nextOrder);
     return nextOrder;
   });
 }
@@ -448,6 +455,32 @@ function normalizeOrderMallbicSync(order) {
     cancelStatus: cancelled ? "cancelled" : cancelStatus,
     cancelledAt: current.cancelledAt || "",
     cancelError: current.cancelError || ""
+  };
+}
+
+function normalizeOrderEcpayLogistics(order) {
+  const current = order.ecpayLogistics && typeof order.ecpayLogistics === "object" ? order.ecpayLogistics : {};
+  const isSevenElevenOrder = order.deliveryMethod === sevenElevenDeliveryMethod;
+  const createStatus = current.createStatus
+    || (current.allPayLogisticsId ? "created" : isSevenElevenOrder ? "pending" : "notNeeded");
+
+  return {
+    createStatus,
+    merchantTradeNo: String(current.merchantTradeNo || ""),
+    allPayLogisticsId: String(current.allPayLogisticsId || ""),
+    logisticsSubType: String(current.logisticsSubType || ecpayLogisticsSubType),
+    rtnCode: String(current.rtnCode || ""),
+    rtnMsg: String(current.rtnMsg || ""),
+    cvsPaymentNo: String(current.cvsPaymentNo || ""),
+    cvsValidationNo: String(current.cvsValidationNo || ""),
+    bookingNote: String(current.bookingNote || ""),
+    goodsAmount: Number(current.goodsAmount || 0),
+    isCollection: String(current.isCollection || ""),
+    createdAt: String(current.createdAt || ""),
+    updatedAt: String(current.updatedAt || ""),
+    error: String(current.error || ""),
+    lastCallbackAt: String(current.lastCallbackAt || ""),
+    lastCallback: current.lastCallback && typeof current.lastCallback === "object" ? current.lastCallback : null
   };
 }
 
@@ -584,6 +617,75 @@ function createEcpayCheckMacValue(fields) {
 
 function buildEcpayTradeNo() {
   return `MAP${Date.now().toString(36).toUpperCase()}${crypto.randomInt(1000, 9999)}`.slice(0, 20);
+}
+
+function buildEcpayLogisticsTradeNo() {
+  return `LOG${Date.now().toString(36).toUpperCase()}${crypto.randomInt(1000, 9999)}`.slice(0, 20);
+}
+
+function formatEcpayDateTime(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("zh-TW", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    }).formatToParts(date).map((part) => [part.type, part.value])
+  );
+  return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+function truncateByEcpayBytes(value, maxBytes) {
+  let output = "";
+  let bytes = 0;
+  for (const char of String(value || "")) {
+    const nextBytes = char.charCodeAt(0) > 255 ? 2 : 1;
+    if (bytes + nextBytes > maxBytes) break;
+    output += char;
+    bytes += nextBytes;
+  }
+  return output;
+}
+
+function sanitizeEcpayPersonName(value, fallback) {
+  const clean = String(value || "")
+    .replace(/[^\u4e00-\u9fa5A-Za-z]/g, "")
+    .trim();
+  return truncateByEcpayBytes(clean || fallback, 10);
+}
+
+function sanitizeEcpayGoodsName(value) {
+  const clean = String(value || "")
+    .replace(/[\^'`!@#%&*+\\"<>|_\[\]]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+  return truncateByEcpayBytes(clean || "拖鞋", 50);
+}
+
+function parseEcpayPipeResponse(text) {
+  const raw = String(text || "").trim();
+  const separatorIndex = raw.indexOf("|");
+  if (separatorIndex < 0) {
+    return { ok: false, message: raw || "綠界回應格式不正確", fields: {} };
+  }
+
+  const status = raw.slice(0, separatorIndex);
+  const payload = raw.slice(separatorIndex + 1);
+  if (status !== "1") return { ok: false, message: payload || raw, fields: {} };
+
+  const fields = Object.fromEntries(new URLSearchParams(payload));
+  return { ok: true, message: fields.RtnMsg || "OK", fields };
+}
+
+function missingEcpayLogisticsCreateConfig() {
+  const missing = missingEcpayMapKeys();
+  if (!ecpaySenderName) missing.push("ECPAY_SENDER_NAME");
+  if (!/^09\d{8}$/.test(ecpaySenderCellPhone)) missing.push("ECPAY_SENDER_CELL_PHONE");
+  return missing;
 }
 
 function htmlEscape(value) {
@@ -960,12 +1062,134 @@ function publicOrderView(order) {
     shippingFee: order.shippingFee || 0,
     totalAmount: order.totalAmount || 0,
     status: order.status || "pending",
+    ecpayLogistics: normalizeOrderEcpayLogistics(order),
     cancelRequest: normalizeCancelRequest(order.cancelRequest),
     canCancel: canBuyerRequestCancelOrder(order),
     createdAt: order.createdAt || "",
     updatedAt: order.updatedAt || "",
     cancelledAt: order.cancelledAt || ""
   };
+}
+
+function buildEcpayGoodsName(order) {
+  return sanitizeEcpayGoodsName((order.items || [])
+    .map((item) => `${item.productName || ""}${item.variantName || ""}`)
+    .filter(Boolean)
+    .join(""));
+}
+
+function buildEcpayCreateFields(order, req) {
+  const receiverCellPhone = normalizePhone(order.phone);
+  if (!/^09\d{8}$/.test(receiverCellPhone)) {
+    throw new Error("7-11 建單需要買家手機為 09 開頭 10 碼");
+  }
+
+  const goodsAmount = Math.round(Number(order.totalAmount || order.productTotal || 0));
+  if (!Number.isInteger(goodsAmount) || goodsAmount < 1 || goodsAmount > 20000) {
+    throw new Error("綠界 7-11 建單金額需介於 NT$1 到 NT$20,000");
+  }
+
+  const fields = {
+    MerchantID: ecpayMerchantId,
+    MerchantTradeNo: buildEcpayLogisticsTradeNo(),
+    MerchantTradeDate: formatEcpayDateTime(),
+    LogisticsType: "CVS",
+    LogisticsSubType: ecpayLogisticsSubType,
+    GoodsAmount: String(goodsAmount),
+    CollectionAmount: ecpayIsCollection === "Y" ? String(goodsAmount) : "",
+    IsCollection: ecpayIsCollection,
+    GoodsName: buildEcpayGoodsName(order),
+    SenderName: sanitizeEcpayPersonName(ecpaySenderName, "賣家"),
+    SenderPhone: "",
+    SenderCellPhone: ecpaySenderCellPhone,
+    ReceiverName: sanitizeEcpayPersonName(order.customerName, "買家"),
+    ReceiverPhone: "",
+    ReceiverCellPhone: receiverCellPhone,
+    ReceiverEmail: "",
+    TradeDesc: `Order ${order.id}`,
+    ServerReplyURL: buildPublicUrl(req, "/api/logistics/ecpay-shipment-callback"),
+    ClientReplyURL: "",
+    Remark: order.id,
+    PlatformID: "",
+    ReceiverStoreID: String(order.sevenElevenStore?.id || "").trim(),
+    ReturnStoreID: ecpayReturnStoreId
+  };
+  fields.CheckMacValue = createEcpayCheckMacValue(fields);
+  return fields;
+}
+
+async function createEcpaySevenElevenLogisticsOrder(order, req) {
+  if (order.deliveryMethod !== sevenElevenDeliveryMethod) {
+    throw new Error("只有 7-11 賣貨便訂單需要建立綠界物流單");
+  }
+  if (!order.sevenElevenStore?.id) {
+    throw new Error("訂單缺少 7-11 門市店號");
+  }
+
+  const missing = missingEcpayLogisticsCreateConfig();
+  if (missing.length > 0) {
+    throw new Error(`綠界物流建單缺少設定：${missing.join("、")}`);
+  }
+
+  const fields = buildEcpayCreateFields(order, req);
+  const response = await fetch(ecpayLogisticsCreateUrl, {
+    method: "POST",
+    headers: {
+      "Accept": "text/html",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams(fields)
+  });
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(`綠界物流建單失敗 HTTP ${response.status}: ${responseText.slice(0, 200)}`);
+  }
+
+  const parsed = parseEcpayPipeResponse(responseText);
+  if (!parsed.ok) throw new Error(parsed.message || "綠界物流建單失敗");
+
+  const result = parsed.fields;
+  const now = new Date().toISOString();
+  return {
+    createStatus: "created",
+    merchantTradeNo: result.MerchantTradeNo || fields.MerchantTradeNo,
+    allPayLogisticsId: result.AllPayLogisticsID || "",
+    logisticsSubType: result.LogisticsSubType || fields.LogisticsSubType,
+    rtnCode: String(result.RtnCode || ""),
+    rtnMsg: result.RtnMsg || "",
+    cvsPaymentNo: result.CVSPaymentNo || "",
+    cvsValidationNo: result.CVSValidationNo || "",
+    bookingNote: result.BookingNote || "",
+    goodsAmount: Number(result.GoodsAmount || fields.GoodsAmount || 0),
+    isCollection: fields.IsCollection,
+    createdAt: now,
+    updatedAt: now,
+    error: "",
+    lastCallbackAt: "",
+    lastCallback: null
+  };
+}
+
+async function attachEcpayLogisticsOrder(order, req) {
+  order.ecpayLogistics = {
+    ...normalizeOrderEcpayLogistics(order),
+    createStatus: "creating",
+    updatedAt: new Date().toISOString(),
+    error: ""
+  };
+
+  try {
+    order.ecpayLogistics = await createEcpaySevenElevenLogisticsOrder(order, req);
+  } catch (error) {
+    order.ecpayLogistics = {
+      ...normalizeOrderEcpayLogistics(order),
+      createStatus: "createFailed",
+      updatedAt: new Date().toISOString(),
+      error: getErrorMessage(error)
+    };
+  }
+
+  return order.ecpayLogistics;
 }
 
 function findBuyerOrders(orders, { phone, orderId = "" }) {
@@ -1118,6 +1342,49 @@ app.post("/api/logistics/ecpay-store-callback", (req, res) => {
     </script>
   </body>
 </html>`);
+});
+
+app.post("/api/logistics/ecpay-shipment-callback", async (req, res) => {
+  const fields = Object.fromEntries(Object.entries(req.body || {}).map(([key, value]) => [key, String(value || "")]));
+  const merchantTradeNo = fields.MerchantTradeNo || "";
+  const allPayLogisticsId = fields.AllPayLogisticsID || "";
+
+  if (!merchantTradeNo && !allPayLogisticsId) {
+    return res.type("text/plain").send("0|missing logistics id");
+  }
+
+  const orders = await readOrders();
+  const order = orders.find((entry) => {
+    const logistics = normalizeOrderEcpayLogistics(entry);
+    return (merchantTradeNo && logistics.merchantTradeNo === merchantTradeNo)
+      || (allPayLogisticsId && logistics.allPayLogisticsId === allPayLogisticsId);
+  });
+
+  if (!order) {
+    return res.type("text/plain").send("0|order not found");
+  }
+
+  order.ecpayLogistics = {
+    ...normalizeOrderEcpayLogistics(order),
+    createStatus: "created",
+    merchantTradeNo: merchantTradeNo || order.ecpayLogistics?.merchantTradeNo || "",
+    allPayLogisticsId: allPayLogisticsId || order.ecpayLogistics?.allPayLogisticsId || "",
+    logisticsSubType: fields.LogisticsSubType || order.ecpayLogistics?.logisticsSubType || "",
+    rtnCode: fields.RtnCode || order.ecpayLogistics?.rtnCode || "",
+    rtnMsg: fields.RtnMsg || order.ecpayLogistics?.rtnMsg || "",
+    cvsPaymentNo: fields.CVSPaymentNo || order.ecpayLogistics?.cvsPaymentNo || "",
+    cvsValidationNo: fields.CVSValidationNo || order.ecpayLogistics?.cvsValidationNo || "",
+    bookingNote: fields.BookingNote || order.ecpayLogistics?.bookingNote || "",
+    goodsAmount: Number(fields.GoodsAmount || order.ecpayLogistics?.goodsAmount || 0),
+    updatedAt: new Date().toISOString(),
+    error: "",
+    lastCallbackAt: new Date().toISOString(),
+    lastCallback: fields
+  };
+  order.updatedAt = new Date().toISOString();
+  await writeOrders(orders);
+
+  res.type("text/plain").send("1|OK");
 });
 
 app.get("/api/markets", async (_req, res) => {
@@ -2817,11 +3084,32 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
       cancelledAt: "",
       cancelError: ""
     },
+    ecpayLogistics: {
+      createStatus: cleanDeliveryMethod === sevenElevenDeliveryMethod ? "pending" : "notNeeded",
+      merchantTradeNo: "",
+      allPayLogisticsId: "",
+      logisticsSubType: ecpayLogisticsSubType,
+      rtnCode: "",
+      rtnMsg: "",
+      cvsPaymentNo: "",
+      cvsValidationNo: "",
+      bookingNote: "",
+      goodsAmount: 0,
+      isCollection: "",
+      createdAt: "",
+      updatedAt: "",
+      error: "",
+      lastCallbackAt: "",
+      lastCallback: null
+    },
     createdAt: new Date().toISOString()
   };
 
   const orders = await readOrders();
   orders.push(order);
+  if (cleanDeliveryMethod === sevenElevenDeliveryMethod && ecpayLogisticsAutoCreateEnabled) {
+    await attachEcpayLogisticsOrder(order, req);
+  }
   await writeOrders(orders);
 
   res.status(201).json({ order, summary: buildOrderSummary(order) });
@@ -2849,6 +3137,31 @@ app.patch("/api/orders/:id/status", requireAdminApi, async (req, res) => {
   }
   await writeOrders(orders);
   res.json({ order });
+});
+
+app.post("/api/admin/orders/:id/ecpay-logistics/create", requireAdminApi, async (req, res) => {
+  const orders = await readOrders();
+  const order = orders.find((entry) => entry.id === req.params.id);
+  if (!order) return res.status(404).json({ message: "找不到訂單" });
+  if (order.deliveryMethod !== sevenElevenDeliveryMethod) {
+    return res.status(400).json({ message: "只有 7-11 賣貨便訂單可以建立綠界物流單" });
+  }
+
+  const current = normalizeOrderEcpayLogistics(order);
+  if (current.createStatus === "created" && current.allPayLogisticsId) {
+    return res.json({ order: publicOrderView(order), message: "這筆訂單已經建立綠界物流單" });
+  }
+
+  await attachEcpayLogisticsOrder(order, req);
+  order.updatedAt = new Date().toISOString();
+  await writeOrders(orders);
+
+  const nextLogistics = normalizeOrderEcpayLogistics(order);
+  if (nextLogistics.createStatus !== "created") {
+    return res.status(400).json({ order: publicOrderView(order), message: nextLogistics.error || "綠界物流建單失敗" });
+  }
+
+  res.json({ order: publicOrderView(order), message: "綠界物流建單完成" });
 });
 
 app.post("/webhook", async (req, res) => {

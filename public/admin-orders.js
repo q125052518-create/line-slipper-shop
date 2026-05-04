@@ -22,6 +22,14 @@ const mallbicCancelLabels = {
   notNeeded: "不用取消"
 };
 
+const ecpayLogisticsLabels = {
+  pending: "待建單",
+  creating: "建單中",
+  created: "已建單",
+  createFailed: "建單失敗",
+  notNeeded: "不用建單"
+};
+
 const cancelRequestLabels = {
   pending: "買家申請取消，等待同意",
   approved: "已同意取消",
@@ -50,6 +58,18 @@ function formatSevenElevenStore(order) {
   const store = order.sevenElevenStore || {};
   const parts = [store.id, store.name, store.address].filter(Boolean);
   return parts.length ? parts.join(" / ") : "-";
+}
+
+function formatEcpayLogistics(order) {
+  if (order.deliveryMethod !== "7-11 賣貨便") return "-";
+
+  const logistics = order.ecpayLogistics || {};
+  const parts = [ecpayLogisticsLabels[logistics.createStatus] || logistics.createStatus || "待建單"];
+  if (logistics.allPayLogisticsId) parts.push(`物流編號 ${logistics.allPayLogisticsId}`);
+  if (logistics.cvsPaymentNo) parts.push(`寄件編號 ${logistics.cvsPaymentNo}`);
+  if (logistics.cvsValidationNo) parts.push(`驗證碼 ${logistics.cvsValidationNo}`);
+  if (logistics.error) parts.push(logistics.error);
+  return parts.join("｜");
 }
 
 function renderCancelRequest(order) {
@@ -90,6 +110,7 @@ async function loadOrders() {
           <div><dt>取貨</dt><dd>${escapeHtml(order.deliveryMethod || "-")}</dd></div>
           <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
           <div><dt>7-11 門市</dt><dd>${escapeHtml(formatSevenElevenStore(order))}</dd></div>
+          <div><dt>綠界物流</dt><dd>${escapeHtml(formatEcpayLogistics(order))}</dd></div>
           <div><dt>運費</dt><dd>${formatMoney(order.shippingFee || 0)}</dd></div>
           <div><dt>金額</dt><dd>${formatMoney(order.totalAmount)}</dd></div>
           <div><dt>取消申請</dt><dd>${escapeHtml(renderCancelRequest(order))}</dd></div>
@@ -103,6 +124,11 @@ async function loadOrders() {
           `).join("")}
         </ul>
         ${order.note ? `<p class="note">備註：${escapeHtml(order.note)}</p>` : ""}
+        ${order.deliveryMethod === "7-11 賣貨便" && order.ecpayLogistics?.createStatus !== "created" ? `
+          <div class="order-actions">
+            <button type="button" data-create-ecpay-logistics="${escapeHtml(order.id)}">建立綠界 7-11 物流單</button>
+          </div>
+        ` : ""}
         ${hasCancelRequest ? `
           <div class="order-actions cancel-request-actions">
             <strong>買家申請取消這筆訂單</strong>
@@ -139,6 +165,25 @@ document.addEventListener("change", async (event) => {
 ordersEl.addEventListener("click", async (event) => {
   const approveId = event.target.dataset.approveCancel;
   const rejectId = event.target.dataset.rejectCancel;
+  const createEcpayLogisticsId = event.target.dataset.createEcpayLogistics;
+
+  if (createEcpayLogisticsId) {
+    event.target.disabled = true;
+    const response = await fetch(`/api/admin/orders/${encodeURIComponent(createEcpayLogisticsId)}/ecpay-logistics/create`, {
+      method: "POST"
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      alert(data.message || "綠界物流建單失敗");
+      event.target.disabled = false;
+      await loadOrders();
+      return;
+    }
+    alert(data.message || "綠界物流建單完成");
+    await loadOrders();
+    return;
+  }
+
   if (!approveId && !rejectId) return;
 
   const isApprove = Boolean(approveId);
