@@ -48,14 +48,6 @@ function formatSevenElevenStore(order) {
   return parts.length ? parts.join(" / ") : "-";
 }
 
-function formatBuyerLogistics(order) {
-  if (order.deliveryMethod !== "7-11 賣貨便") return "-";
-  const logistics = order.ecpayLogistics || {};
-  if (logistics.createStatus === "created") return "物流單已建立";
-  if (logistics.createStatus === "createFailed") return "物流單建立中";
-  return "待建立物流單";
-}
-
 function placeholderImage(name) {
   return `https://placehold.co/160x160/f2efe8/1e2720?text=${encodeURIComponent(name || "Item")}`;
 }
@@ -133,7 +125,6 @@ function renderOrders(orders) {
         <div><dt>取貨方式</dt><dd>${escapeHtml(order.deliveryMethod || "-")}</dd></div>
         <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
         <div><dt>7-11 門市</dt><dd>${escapeHtml(formatSevenElevenStore(order))}</dd></div>
-        <div><dt>物流</dt><dd>${escapeHtml(formatBuyerLogistics(order))}</dd></div>
         <div><dt>運費</dt><dd>${formatMoney(order.shippingFee || 0)}</dd></div>
       </dl>
 

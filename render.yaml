@@ -41,11 +41,3 @@ services:
         sync: false
       - key: ECPAY_LOGISTICS_SUB_TYPE
         value: UNIMARTC2C
-      - key: ECPAY_LOGISTICS_AUTO_CREATE_ENABLED
-        value: "true"
-      - key: ECPAY_SENDER_NAME
-        sync: false
-      - key: ECPAY_SENDER_CELL_PHONE
-        sync: false
-      - key: ECPAY_IS_COLLECTION
-        value: "false"
