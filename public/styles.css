@@ -419,6 +419,13 @@ select {
   padding-top: 16px;
 }
 
+.total-row-sub {
+  border-top: 0;
+  color: #65716b;
+  font-size: 16px;
+  padding-top: 8px;
+}
+
 .message {
   color: #0d713b;
   line-height: 1.6;
@@ -427,6 +434,26 @@ select {
 
 .hidden {
   display: none !important;
+}
+
+.store-picker {
+  border: 1px solid #ded8cd;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.store-picker-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.secondary-button {
+  background: #e7f2ee;
+  color: #0d5749;
 }
 
 .admin-main {

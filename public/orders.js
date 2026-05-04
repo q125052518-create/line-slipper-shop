@@ -42,6 +42,12 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("zh-TW", { hour12: false });
 }
 
+function formatSevenElevenStore(order) {
+  const store = order.sevenElevenStore || {};
+  const parts = [store.id, store.name, store.address].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "-";
+}
+
 function placeholderImage(name) {
   return `https://placehold.co/160x160/f2efe8/1e2720?text=${encodeURIComponent(name || "Item")}`;
 }
@@ -118,6 +124,8 @@ function renderOrders(orders) {
         <div><dt>手機</dt><dd>${escapeHtml(order.phone || "-")}</dd></div>
         <div><dt>取貨方式</dt><dd>${escapeHtml(order.deliveryMethod || "-")}</dd></div>
         <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
+        <div><dt>7-11 門市</dt><dd>${escapeHtml(formatSevenElevenStore(order))}</dd></div>
+        <div><dt>運費</dt><dd>${formatMoney(order.shippingFee || 0)}</dd></div>
       </dl>
 
       <div class="buyer-order-items">

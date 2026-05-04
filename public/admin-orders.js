@@ -46,6 +46,12 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("zh-TW", { hour12: false });
 }
 
+function formatSevenElevenStore(order) {
+  const store = order.sevenElevenStore || {};
+  const parts = [store.id, store.name, store.address].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "-";
+}
+
 function renderCancelRequest(order) {
   const request = order.cancelRequest || {};
   if (!request.status) return "-";
@@ -83,6 +89,8 @@ async function loadOrders() {
           <div><dt>電話</dt><dd>${escapeHtml(order.phone || "-")}</dd></div>
           <div><dt>取貨</dt><dd>${escapeHtml(order.deliveryMethod || "-")}</dd></div>
           <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
+          <div><dt>7-11 門市</dt><dd>${escapeHtml(formatSevenElevenStore(order))}</dd></div>
+          <div><dt>運費</dt><dd>${formatMoney(order.shippingFee || 0)}</dd></div>
           <div><dt>金額</dt><dd>${formatMoney(order.totalAmount)}</dd></div>
           <div><dt>取消申請</dt><dd>${escapeHtml(renderCancelRequest(order))}</dd></div>
           <div><dt>墨筆克匯入</dt><dd>${escapeHtml(mallbicImportLabels[order.mallbic?.importStatus] || order.mallbic?.importStatus || "待匯入")}</dd></div>

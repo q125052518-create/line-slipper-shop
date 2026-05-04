@@ -14,6 +14,8 @@ const port = Number(process.env.PORT || 3000);
 const adminAccount = process.env.ADMIN_ACCOUNT || "admin";
 const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
 const sessionSecret = process.env.SESSION_SECRET || "dev-session-secret-change-me";
+const sevenElevenDeliveryMethod = "7-11 賣貨便";
+const sevenElevenShippingFee = Number(process.env.SEVEN_ELEVEN_SHIPPING_FEE || 38);
 const channelSecret = process.env.LINE_CHANNEL_SECRET || "";
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 const dataDir = path.join(__dirname, "data");
@@ -721,7 +723,8 @@ function buildOrderSummary(order) {
   const lines = order.items
     .map((item) => `${item.productName} - ${item.variantName} x ${item.quantity}`)
     .join("\n");
-  return `訂單已建立：${order.id}\n${lines}\n總金額：NT$${order.totalAmount}`;
+  const shippingLine = Number(order.shippingFee || 0) > 0 ? `\n運費：NT$${order.shippingFee}` : "";
+  return `訂單已建立：${order.id}\n${lines}${shippingLine}\n總金額：NT$${order.totalAmount}`;
 }
 
 const buyerCancelableStatuses = new Set(["pending", "processing"]);
@@ -890,8 +893,11 @@ function publicOrderView(order) {
     phone: order.phone || "",
     deliveryMethod: order.deliveryMethod || "",
     deliveryAddress: order.deliveryAddress || "",
+    sevenElevenStore: order.sevenElevenStore || null,
     note: order.note || "",
     items: order.items || [],
+    productTotal: order.productTotal || Math.max(0, Number(order.totalAmount || 0) - Number(order.shippingFee || 0)),
+    shippingFee: order.shippingFee || 0,
     totalAmount: order.totalAmount || 0,
     status: order.status || "pending",
     cancelRequest: normalizeCancelRequest(order.cancelRequest),
@@ -1235,7 +1241,16 @@ function shouldUpdateOrderStatusFromMallbic(order) {
 }
 
 function mallbicOrderDeliveryMethod(order) {
-  return order.deliveryMethod === "宅配" ? "快遞[代收]" : "面交[代收]";
+  return ["宅配", sevenElevenDeliveryMethod].includes(order.deliveryMethod) ? "快遞[代收]" : "面交[代收]";
+}
+
+function mallbicOrderAddress(order) {
+  if (order.deliveryMethod === "宅配") return order.deliveryAddress || "";
+  if (order.deliveryMethod === sevenElevenDeliveryMethod) {
+    const store = order.sevenElevenStore || {};
+    return [store.id, store.name, store.address].filter(Boolean).join(" ");
+  }
+  return "";
 }
 
 function expandMallbicOrderRows(order) {
@@ -1251,7 +1266,7 @@ function expandMallbicOrderRows(order) {
         quantity: 1,
         subtotal: Number(item.price || 0),
         deliveryMethod: mallbicOrderDeliveryMethod(order),
-        address: order.deliveryMethod === "宅配" ? order.deliveryAddress || "" : ""
+        address: mallbicOrderAddress(order)
       });
     }
   }
@@ -2572,13 +2587,25 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
   const orderPhone = String(buyer?.phone || phone || "").trim();
   const cleanDeliveryMethod = String(deliveryMethod || "").trim();
   const cleanDeliveryAddress = String(deliveryAddress || "").trim();
+  const rawSevenElevenStore = req.body?.sevenElevenStore || {};
+  const cleanSevenElevenStore = {
+    id: String(rawSevenElevenStore.id || rawSevenElevenStore.code || req.body?.sevenElevenStoreId || "").trim(),
+    name: String(rawSevenElevenStore.name || req.body?.sevenElevenStoreName || "").trim(),
+    address: String(rawSevenElevenStore.address || req.body?.sevenElevenStoreAddress || "").trim()
+  };
 
-  if (!["宅配", "自行取貨"].includes(cleanDeliveryMethod)) {
+  if (!["宅配", "自行取貨", sevenElevenDeliveryMethod].includes(cleanDeliveryMethod)) {
     return res.status(400).json({ message: "請選擇取貨方式" });
   }
 
   if (cleanDeliveryMethod === "宅配" && !cleanDeliveryAddress) {
     return res.status(400).json({ message: "宅配請填寫地址" });
+  }
+
+  if (cleanDeliveryMethod === sevenElevenDeliveryMethod) {
+    if (!cleanSevenElevenStore.id || !cleanSevenElevenStore.name || !cleanSevenElevenStore.address) {
+      return res.status(400).json({ message: "請填寫 7-11 門市店號、名稱與地址" });
+    }
   }
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -2623,7 +2650,9 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
   }
   await writeCatalog(catalog);
 
-  const totalAmount = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const productTotal = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const shippingFee = cleanDeliveryMethod === sevenElevenDeliveryMethod ? sevenElevenShippingFee : 0;
+  const totalAmount = productTotal + shippingFee;
   const order = {
     id: `ORD-${Date.now()}`,
     buyerId: buyer?.id || "",
@@ -2631,9 +2660,16 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
     customerName: orderCustomerName,
     phone: orderPhone,
     deliveryMethod: cleanDeliveryMethod,
-    deliveryAddress: cleanDeliveryMethod === "宅配" ? cleanDeliveryAddress : "",
+    deliveryAddress: cleanDeliveryMethod === "宅配"
+      ? cleanDeliveryAddress
+      : cleanDeliveryMethod === sevenElevenDeliveryMethod
+        ? cleanSevenElevenStore.address
+        : "",
+    sevenElevenStore: cleanDeliveryMethod === sevenElevenDeliveryMethod ? cleanSevenElevenStore : null,
     note: note || "",
     items: normalizedItems,
+    productTotal,
+    shippingFee,
     totalAmount,
     status: "pending",
     mallbic: {

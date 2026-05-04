@@ -26,6 +26,14 @@
       <section class="checkout">
         <h2>購物車</h2>
         <div id="cart" class="cart-list"></div>
+        <div class="total-row total-row-sub">
+          <span>商品金額</span>
+          <strong id="subtotal">NT$0</strong>
+        </div>
+        <div class="total-row total-row-sub">
+          <span>運費</span>
+          <strong id="shippingFee">NT$0</strong>
+        </div>
         <div class="total-row">
           <span>總金額</span>
           <strong id="total">NT$0</strong>
@@ -49,12 +57,32 @@
               <option value="">請選擇</option>
               <option value="宅配">宅配</option>
               <option value="自行取貨">自行取貨</option>
+              <option value="7-11 賣貨便">7-11 賣貨便</option>
             </select>
           </label>
           <label id="addressField" class="hidden">
             宅配地址
             <input name="deliveryAddress" id="deliveryAddress" autocomplete="street-address">
           </label>
+          <div id="sevenElevenField" class="store-picker hidden">
+            <div class="store-picker-head">
+              <strong>7-11 取貨門市</strong>
+              <button type="button" id="openSevenElevenMapButton" class="secondary-button">開啟門市查詢</button>
+            </div>
+            <p class="muted">先開啟 7-11 門市查詢，選好後把店號、店名、地址填回來。</p>
+            <label>
+              門市店號
+              <input name="sevenElevenStoreId" id="sevenElevenStoreId" inputmode="numeric" autocomplete="off">
+            </label>
+            <label>
+              門市名稱
+              <input name="sevenElevenStoreName" id="sevenElevenStoreName" autocomplete="off">
+            </label>
+            <label>
+              門市地址
+              <input name="sevenElevenStoreAddress" id="sevenElevenStoreAddress" autocomplete="street-address">
+            </label>
+          </div>
           <label>
             備註
             <textarea name="note" rows="3" placeholder="尺寸需求、顏色備註、其他資訊"></textarea>

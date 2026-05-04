@@ -1,4 +1,7 @@
 const CART_KEY = "line-slipper-cart";
+const SEVEN_ELEVEN_METHOD = "7-11 賣貨便";
+const SEVEN_ELEVEN_SHIPPING_FEE = 38;
+const SEVEN_ELEVEN_MAP_URL = "https://emap.pcsc.com.tw/mobilemap/";
 
 const state = {
   markets: [],
@@ -8,12 +11,19 @@ const state = {
 };
 
 const cartEl = document.querySelector("#cart");
+const subtotalEl = document.querySelector("#subtotal");
+const shippingFeeEl = document.querySelector("#shippingFee");
 const totalEl = document.querySelector("#total");
 const formEl = document.querySelector("#orderForm");
 const messageEl = document.querySelector("#message");
 const deliveryMethodEl = document.querySelector("#deliveryMethod");
 const addressFieldEl = document.querySelector("#addressField");
 const deliveryAddressEl = document.querySelector("#deliveryAddress");
+const sevenElevenFieldEl = document.querySelector("#sevenElevenField");
+const openSevenElevenMapButtonEl = document.querySelector("#openSevenElevenMapButton");
+const sevenElevenStoreIdEl = document.querySelector("#sevenElevenStoreId");
+const sevenElevenStoreNameEl = document.querySelector("#sevenElevenStoreName");
+const sevenElevenStoreAddressEl = document.querySelector("#sevenElevenStoreAddress");
 
 async function initLiff() {
   const config = await fetch("/api/config").then((response) => response.json());
@@ -74,6 +84,28 @@ function formatMoney(value) {
   return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
 }
 
+function cartItems() {
+  return Object.entries(state.cart);
+}
+
+function cartSubtotal() {
+  return cartItems().reduce((sum, [, item]) => sum + item.price * item.quantity, 0);
+}
+
+function currentShippingFee() {
+  return deliveryMethodEl.value === SEVEN_ELEVEN_METHOD && cartItems().length > 0
+    ? SEVEN_ELEVEN_SHIPPING_FEE
+    : 0;
+}
+
+function renderTotals() {
+  const subtotal = cartSubtotal();
+  const shippingFee = currentShippingFee();
+  if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
+  if (shippingFeeEl) shippingFeeEl.textContent = formatMoney(shippingFee);
+  totalEl.textContent = formatMoney(subtotal + shippingFee);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -114,12 +146,12 @@ function refreshCartFromCatalog() {
 }
 
 function renderCart() {
-  const items = Object.entries(state.cart);
+  const items = cartItems();
   const submitButton = formEl.querySelector('button[type="submit"]');
 
   if (items.length === 0) {
     cartEl.innerHTML = '<p class="empty">購物車是空的，請先回賣場加入商品。</p>';
-    totalEl.textContent = formatMoney(0);
+    renderTotals();
     submitButton.disabled = true;
     return;
   }
@@ -147,8 +179,7 @@ function renderCart() {
     </div>
   `).join("");
 
-  const total = items.reduce((sum, [, item]) => sum + item.price * item.quantity, 0);
-  totalEl.textContent = formatMoney(total);
+  renderTotals();
 }
 
 function placeholderImage(name) {
@@ -173,13 +204,26 @@ function changeQuantity(key, delta) {
 }
 
 function updateDeliveryAddressVisibility() {
+  const isSevenEleven = deliveryMethodEl.value === SEVEN_ELEVEN_METHOD;
   const isShipping = deliveryMethodEl.value === "宅配";
   addressFieldEl.classList.toggle("hidden", !isShipping);
   deliveryAddressEl.required = isShipping;
   if (!isShipping) deliveryAddressEl.value = "";
+  if (sevenElevenFieldEl) {
+    sevenElevenFieldEl.classList.toggle("hidden", !isSevenEleven);
+  }
+  [sevenElevenStoreIdEl, sevenElevenStoreNameEl, sevenElevenStoreAddressEl].forEach((input) => {
+    if (!input) return;
+    input.required = isSevenEleven;
+    if (!isSevenEleven) input.value = "";
+  });
+  renderTotals();
 }
 
 deliveryMethodEl.addEventListener("change", updateDeliveryAddressVisibility);
+openSevenElevenMapButtonEl?.addEventListener("click", () => {
+  window.open(SEVEN_ELEVEN_MAP_URL, "_blank", "noopener");
+});
 
 document.addEventListener("click", (event) => {
   const plusKey = event.target.dataset.plus;
@@ -227,6 +271,11 @@ formEl.addEventListener("submit", async (event) => {
       phone: formData.get("phone"),
       deliveryMethod: formData.get("deliveryMethod"),
       deliveryAddress: formData.get("deliveryAddress"),
+      sevenElevenStore: {
+        id: formData.get("sevenElevenStoreId"),
+        name: formData.get("sevenElevenStoreName"),
+        address: formData.get("sevenElevenStoreAddress")
+      },
       note: formData.get("note"),
       items
     })
