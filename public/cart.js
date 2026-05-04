@@ -1,7 +1,9 @@
 const CART_KEY = "line-slipper-cart";
 const SEVEN_ELEVEN_METHOD = "7-11 賣貨便";
 const SEVEN_ELEVEN_SHIPPING_FEE = 38;
-const SEVEN_ELEVEN_MAP_URL = "https://www.ibon.com.tw/retail_inquiry.aspx";
+const SEVEN_ELEVEN_LOOKUP_URL = "https://www.ibon.com.tw/retail_inquiry.aspx";
+const SEVEN_ELEVEN_STORE_KEY = "line-slipper-selected-seven-eleven-store";
+const CHECKOUT_DRAFT_KEY = "line-slipper-checkout-draft";
 
 const state = {
   markets: [],
@@ -104,6 +106,87 @@ function renderTotals() {
   if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
   if (shippingFeeEl) shippingFeeEl.textContent = formatMoney(shippingFee);
   totalEl.textContent = formatMoney(subtotal + shippingFee);
+}
+
+function saveCheckoutDraft() {
+  if (!formEl) return;
+  const draft = Object.fromEntries(new FormData(formEl).entries());
+  sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft));
+}
+
+function restoreCheckoutDraft() {
+  let draft = null;
+  try {
+    draft = JSON.parse(sessionStorage.getItem(CHECKOUT_DRAFT_KEY) || "null");
+  } catch {
+    draft = null;
+  }
+  if (!draft) return;
+
+  Object.entries(draft).forEach(([name, value]) => {
+    const input = formEl.elements[name];
+    if (input) input.value = value;
+  });
+}
+
+function applySelectedSevenElevenStore() {
+  let store = null;
+  try {
+    store = JSON.parse(sessionStorage.getItem(SEVEN_ELEVEN_STORE_KEY) || "null");
+  } catch {
+    store = null;
+  }
+  sessionStorage.removeItem(SEVEN_ELEVEN_STORE_KEY);
+  if (!store?.id || !store?.name || !store?.address) return;
+
+  deliveryMethodEl.value = SEVEN_ELEVEN_METHOD;
+  sevenElevenStoreIdEl.value = store.id;
+  sevenElevenStoreNameEl.value = store.name;
+  sevenElevenStoreAddressEl.value = store.address;
+  messageEl.textContent = `已選擇 7-11 門市：${store.name}`;
+}
+
+function submitEcpayMapForm(action, fields) {
+  const mapForm = document.createElement("form");
+  mapForm.method = "POST";
+  mapForm.action = action;
+  mapForm.style.display = "none";
+
+  Object.entries(fields).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    mapForm.appendChild(input);
+  });
+
+  document.body.appendChild(mapForm);
+  mapForm.submit();
+}
+
+async function openSevenElevenStoreSelector() {
+  saveCheckoutDraft();
+  messageEl.textContent = "正在開啟 7-11 門市選擇...";
+
+  try {
+    const response = await fetch("/api/logistics/ecpay-map", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device: /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent) ? "1" : "0" })
+    });
+    const data = await response.json();
+
+    if (response.ok && data.enabled && data.action && data.fields) {
+      submitEcpayMapForm(data.action, data.fields);
+      return;
+    }
+
+    messageEl.textContent = data.message || "尚未設定綠界電子地圖，先開啟 7-11 門市查詢。";
+    window.open(data.fallbackUrl || SEVEN_ELEVEN_LOOKUP_URL, "_blank", "noopener");
+  } catch {
+    messageEl.textContent = "電子地圖開啟失敗，先開啟 7-11 門市查詢。";
+    window.open(SEVEN_ELEVEN_LOOKUP_URL, "_blank", "noopener");
+  }
 }
 
 function escapeHtml(value) {
@@ -221,9 +304,7 @@ function updateDeliveryAddressVisibility() {
 }
 
 deliveryMethodEl.addEventListener("change", updateDeliveryAddressVisibility);
-openSevenElevenMapButtonEl?.addEventListener("click", () => {
-  window.open(SEVEN_ELEVEN_MAP_URL, "_blank", "noopener");
-});
+openSevenElevenMapButtonEl?.addEventListener("click", openSevenElevenStoreSelector);
 
 document.addEventListener("click", (event) => {
   const plusKey = event.target.dataset.plus;
@@ -290,6 +371,7 @@ formEl.addEventListener("submit", async (event) => {
 
   localStorage.setItem("line-slipper-order-phone", String(formData.get("phone") || ""));
   localStorage.setItem("line-slipper-last-order-id", data.order.id);
+  sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
   clearCart();
   formEl.reset();
   updateDeliveryAddressVisibility();
@@ -297,6 +379,8 @@ formEl.addEventListener("submit", async (event) => {
   messageEl.textContent = `${data.summary}\n可到「我的訂單」查詢或取消訂單。`;
 });
 
+restoreCheckoutDraft();
+applySelectedSevenElevenStore();
 updateDeliveryAddressVisibility();
 initLiff().finally(async () => {
   await loadBuyerStatus();

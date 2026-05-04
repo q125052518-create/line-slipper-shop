@@ -33,3 +33,11 @@ services:
         value: "false"
       - key: MALLBIC_ORDER_AUTO_SYNC_INTERVAL_MS
         value: "300000"
+      - key: ECPAY_MERCHANT_ID
+        sync: false
+      - key: ECPAY_HASH_KEY
+        sync: false
+      - key: ECPAY_HASH_IV
+        sync: false
+      - key: ECPAY_LOGISTICS_SUB_TYPE
+        value: UNIMARTC2C

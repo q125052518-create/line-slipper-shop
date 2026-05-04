@@ -16,6 +16,12 @@ const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
 const sessionSecret = process.env.SESSION_SECRET || "dev-session-secret-change-me";
 const sevenElevenDeliveryMethod = "7-11 賣貨便";
 const sevenElevenShippingFee = Number(process.env.SEVEN_ELEVEN_SHIPPING_FEE || 38);
+const sevenElevenFallbackMapUrl = "https://www.ibon.com.tw/retail_inquiry.aspx";
+const ecpayMerchantId = process.env.ECPAY_MERCHANT_ID || "";
+const ecpayHashKey = process.env.ECPAY_HASH_KEY || "";
+const ecpayHashIv = process.env.ECPAY_HASH_IV || "";
+const ecpayLogisticsMapUrl = process.env.ECPAY_LOGISTICS_MAP_URL || "https://logistics.ecpay.com.tw/Express/map";
+const ecpayLogisticsSubType = process.env.ECPAY_LOGISTICS_SUB_TYPE || "UNIMARTC2C";
 const channelSecret = process.env.LINE_CHANNEL_SECRET || "";
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
 const dataDir = path.join(__dirname, "data");
@@ -105,6 +111,7 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
+app.use(express.urlencoded({ extended: false }));
 app.set("trust proxy", 1);
 app.post("/api/auth/login", (req, res) => {
   const password = String(req.body?.password || "").trim();
@@ -533,6 +540,49 @@ function getErrorMessage(error) {
 function parseEnvFlag(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   return !["0", "false", "no", "off"].includes(String(value).trim().toLowerCase());
+}
+
+function isEcpayMapEnabled() {
+  return Boolean(ecpayMerchantId && ecpayHashKey && ecpayHashIv);
+}
+
+function buildPublicUrl(req, pathname) {
+  const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+  if (configuredBaseUrl) return `${configuredBaseUrl}${pathname}`;
+  return `${req.protocol}://${req.get("host")}${pathname}`;
+}
+
+function encodeEcpayCheckMacValue(value) {
+  return encodeURIComponent(value)
+    .toLowerCase()
+    .replaceAll("%20", "+")
+    .replaceAll("%2d", "-")
+    .replaceAll("%5f", "_")
+    .replaceAll("%2e", ".")
+    .replaceAll("%21", "!")
+    .replaceAll("%2a", "*")
+    .replaceAll("%28", "(")
+    .replaceAll("%29", ")");
+}
+
+function createEcpayCheckMacValue(fields) {
+  const sortedKeys = Object.keys(fields).sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  const sortedPayload = sortedKeys.map((key) => `${key}=${fields[key]}`).join("&");
+  const raw = `HashKey=${ecpayHashKey}&${sortedPayload}&HashIV=${ecpayHashIv}`;
+  return crypto.createHash("md5").update(encodeEcpayCheckMacValue(raw)).digest("hex").toUpperCase();
+}
+
+function buildEcpayTradeNo() {
+  return `MAP${Date.now().toString(36).toUpperCase()}${crypto.randomInt(1000, 9999)}`.slice(0, 20);
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function parseCookies(req) {
@@ -984,6 +1034,68 @@ function restoreOrderStock(catalog, order) {
 
 app.get("/api/config", (_req, res) => {
   res.json({ liffId: process.env.LIFF_ID || "" });
+});
+
+app.post("/api/logistics/ecpay-map", requireBuyerApi, (req, res) => {
+  if (!isEcpayMapEnabled()) {
+    return res.json({
+      enabled: false,
+      fallbackUrl: sevenElevenFallbackMapUrl,
+      message: "尚未設定綠界電子地圖金鑰，先開啟 7-11 門市查詢備援。"
+    });
+  }
+
+  const device = String(req.body?.device || "").trim() || (/Mobile|Android|iPhone|iPad/i.test(req.headers["user-agent"] || "") ? "1" : "0");
+  const fields = {
+    MerchantID: ecpayMerchantId,
+    MerchantTradeNo: buildEcpayTradeNo(),
+    LogisticsType: "CVS",
+    LogisticsSubType: ecpayLogisticsSubType,
+    IsCollection: "N",
+    ServerReplyURL: buildPublicUrl(req, "/api/logistics/ecpay-store-callback"),
+    ExtraData: "cart",
+    Device: device === "1" ? "1" : "0"
+  };
+  fields.CheckMacValue = createEcpayCheckMacValue(fields);
+
+  res.json({ enabled: true, action: ecpayLogisticsMapUrl, fields });
+});
+
+app.post("/api/logistics/ecpay-store-callback", (req, res) => {
+  const store = {
+    id: String(req.body?.CVSStoreID || "").trim(),
+    name: String(req.body?.CVSStoreName || "").trim(),
+    address: String(req.body?.CVSAddress || "").trim(),
+    telephone: String(req.body?.CVSTelephone || "").trim(),
+    logisticsSubType: String(req.body?.LogisticsSubType || "").trim()
+  };
+  const storeJson = JSON.stringify(store).replaceAll("<", "\\u003c");
+
+  res.type("html").send(`<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>已選擇 7-11 門市</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f1ea; color: #0f1f1a; margin: 0; padding: 40px 20px; }
+      main { max-width: 520px; margin: 0 auto; background: #fffdf8; border: 1px solid #d8d0c4; border-radius: 8px; padding: 24px; }
+      a { color: #127a64; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>已選擇 7-11 門市</h1>
+      <p>${htmlEscape(store.name || "門市")} ${store.address ? `｜${htmlEscape(store.address)}` : ""}</p>
+      <p>正在回到購物車...</p>
+      <p><a href="/cart.html?store=selected">沒有自動跳轉時點這裡</a></p>
+    </main>
+    <script>
+      sessionStorage.setItem("line-slipper-selected-seven-eleven-store", ${JSON.stringify(storeJson)});
+      location.replace("/cart.html?store=selected");
+    </script>
+  </body>
+</html>`);
 });
 
 app.get("/api/markets", async (_req, res) => {
