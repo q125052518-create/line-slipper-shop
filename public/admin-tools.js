@@ -10,6 +10,9 @@ const mallbicOrderStatusButtonEl = document.querySelector("#mallbicOrderStatusBu
 const mallbicOrderStatusMessageEl = document.querySelector("#mallbicOrderStatusMessage");
 const productImportFormEl = document.querySelector("#productImportForm");
 const productImportMessageEl = document.querySelector("#productImportMessage");
+const myshipOrderSyncButtonEl = document.querySelector("#myshipOrderSyncButton");
+const myshipOrderSyncStatusEl = document.querySelector("#myshipOrderSyncStatus");
+const myshipOrderSyncMessageEl = document.querySelector("#myshipOrderSyncMessage");
 
 function formatDateTime(value) {
   if (!value) return "尚未執行";
@@ -71,6 +74,32 @@ async function loadMallbicOrderSyncStatus() {
     renderMallbicOrderSyncStatus(status);
   } catch {
     mallbicOrderSyncStatusEl.textContent = "訂單同步狀態讀取失敗";
+  }
+}
+
+function renderMyshipOrderSyncStatus(status) {
+  if (!myshipOrderSyncStatusEl) return;
+  const intervalMinutes = Math.round(Number(status.intervalMs || 0) / 60000);
+  const mode = status.enabled ? `自動建單：每 ${intervalMinutes} 分鐘` : "自動建單：未啟用";
+  const pending = `待建單 ${status.pendingCreate || 0} 筆`;
+  const running = status.running ? "執行中" : "";
+  const success = `最後成功：${formatDateTime(status.lastSuccessAt)}`;
+  const finished = status.lastFinishedAt ? `最後完成：${formatDateTime(status.lastFinishedAt)}` : "";
+  const result = status.lastResult
+    ? `上次建立 ${status.lastResult.createdOrders || 0} 筆，失敗 ${status.lastResult.failedOrders || 0} 筆`
+    : "";
+  const missing = status.missingKeys?.length ? `缺少設定：${status.missingKeys.join(", ")}` : "";
+  const error = status.lastError ? `上次錯誤：${status.lastError}` : "";
+  myshipOrderSyncStatusEl.textContent = [mode, pending, success, finished, result, running, missing, error].filter(Boolean).join("｜");
+}
+
+async function loadMyshipOrderSyncStatus() {
+  if (!myshipOrderSyncStatusEl) return;
+  try {
+    const status = await fetch("/api/admin/myship/order-sync-status").then((response) => response.json());
+    renderMyshipOrderSyncStatus(status);
+  } catch {
+    myshipOrderSyncStatusEl.textContent = "賣貨便建單狀態讀取失敗";
   }
 }
 
@@ -212,7 +241,39 @@ mallbicOrderStatusButtonEl.addEventListener("click", async () => {
   }
 });
 
+myshipOrderSyncButtonEl?.addEventListener("click", async () => {
+  const confirmed = confirm("要把待處理的 7-11 訂單送去賣貨便建單嗎？");
+  if (!confirmed) return;
+
+  myshipOrderSyncButtonEl.disabled = true;
+  myshipOrderSyncMessageEl.textContent = "正在開啟賣貨便並嘗試 Facebook 登入...";
+
+  try {
+    const response = await fetch("/api/admin/myship/create-orders", { method: "POST" });
+    const data = await response.json();
+
+    if (!response.ok) {
+      myshipOrderSyncMessageEl.textContent = data.message || "賣貨便建單失敗";
+      return;
+    }
+
+    const failed = data.failed?.length
+      ? `，失敗：${data.failed.map((item) => `${item.orderId} ${item.message}`).join("；")}`
+      : "";
+    myshipOrderSyncMessageEl.textContent =
+      `賣貨便建單完成：成功 ${data.createdOrders || 0} 筆，失敗 ${data.failedOrders || 0} 筆${failed}`;
+    await loadMyshipOrderSyncStatus();
+  } catch {
+    myshipOrderSyncMessageEl.textContent = "賣貨便建單失敗，請稍後再試";
+  } finally {
+    myshipOrderSyncButtonEl.disabled = false;
+    await loadMyshipOrderSyncStatus();
+  }
+});
+
 loadMallbicSyncStatus();
 loadMallbicOrderSyncStatus();
+loadMyshipOrderSyncStatus();
 setInterval(loadMallbicSyncStatus, 60 * 1000);
 setInterval(loadMallbicOrderSyncStatus, 60 * 1000);
+setInterval(loadMyshipOrderSyncStatus, 60 * 1000);

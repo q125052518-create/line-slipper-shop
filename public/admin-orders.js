@@ -22,6 +22,15 @@ const mallbicCancelLabels = {
   notNeeded: "不用取消"
 };
 
+const myshipCreateLabels = {
+  pending: "待建單",
+  creating: "建單中",
+  created: "已建單",
+  failed: "建單失敗",
+  skipped: "已略過",
+  notNeeded: "不需要"
+};
+
 const cancelRequestLabels = {
   pending: "買家申請取消，等待同意",
   approved: "已同意取消",
@@ -96,6 +105,10 @@ async function loadOrders() {
           <div><dt>墨筆克匯入</dt><dd>${escapeHtml(mallbicImportLabels[order.mallbic?.importStatus] || order.mallbic?.importStatus || "待匯入")}</dd></div>
           <div><dt>墨筆克訂單號</dt><dd>${escapeHtml(order.mallbic?.mallbicOrderNo || "-")}</dd></div>
           <div><dt>墨筆克取消</dt><dd>${escapeHtml(mallbicCancelLabels[order.mallbic?.cancelStatus] || order.mallbic?.cancelStatus || "-")}</dd></div>
+          <div><dt>賣貨便建單</dt><dd>${escapeHtml(myshipCreateLabels[order.myship?.createStatus] || order.myship?.createStatus || "-")}</dd></div>
+          <div><dt>賣貨便訂單號</dt><dd>${escapeHtml(order.myship?.orderNo || "-")}</dd></div>
+          <div><dt>賣貨便數量</dt><dd>${escapeHtml(order.myship?.quantity || "-")}</dd></div>
+          <div><dt>賣貨便錯誤</dt><dd>${escapeHtml(order.myship?.error || "-")}</dd></div>
         </dl>
         <ul>
           ${(order.items || []).map((item) => `

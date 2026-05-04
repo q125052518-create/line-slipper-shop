@@ -41,3 +41,15 @@ services:
         sync: false
       - key: ECPAY_LOGISTICS_SUB_TYPE
         value: UNIMARTC2C
+      - key: MYSHIP_PRODUCT_URL
+        value: https://myship.7-11.com.tw/general/detail/GM2506169881759
+      - key: MYSHIP_FACEBOOK_EMAIL
+        sync: false
+      - key: MYSHIP_FACEBOOK_PASSWORD
+        sync: false
+      - key: MYSHIP_AUTO_ORDER_ENABLED
+        value: "false"
+      - key: MYSHIP_AUTO_ORDER_INTERVAL_MS
+        value: "300000"
+      - key: MYSHIP_AMOUNT_SOURCE
+        value: totalAmount

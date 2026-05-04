@@ -32,6 +32,7 @@ const catalogFile = path.join(dataDir, "catalog.json");
 const mallbicSyncFile = path.join(dataDir, "mallbic-sync.json");
 const mallbicOrderSyncFile = path.join(dataDir, "mallbic-order-sync.json");
 const mallbicOrderTemplateFile = path.join(dataDir, "mallbic-order-template.xls");
+const myshipOrderSyncFile = path.join(dataDir, "myship-order-sync.json");
 const mallbicLoginUrl = process.env.MALLBIC_LOGIN_URL || "https://ec.mallbic.com/Module/0_Login/Login.aspx?sid=g5c071iv";
 const mallbicCompanyName = process.env.MALLBIC_COMPANY_NAME || "祥瑞華有限公司";
 const mallbicDefaultTimeoutMs = Number(process.env.MALLBIC_DEFAULT_TIMEOUT_MS || 30000);
@@ -41,9 +42,18 @@ const mallbicAutoSyncEnabled = parseEnvFlag(process.env.MALLBIC_AUTO_SYNC_ENABLE
 const mallbicAutoSyncIntervalMs = Math.max(60000, Number(process.env.MALLBIC_AUTO_SYNC_INTERVAL_MS || 60 * 60 * 1000));
 const mallbicOrderAutoSyncEnabled = parseEnvFlag(process.env.MALLBIC_ORDER_AUTO_SYNC_ENABLED, false);
 const mallbicOrderAutoSyncIntervalMs = Math.max(60000, Number(process.env.MALLBIC_ORDER_AUTO_SYNC_INTERVAL_MS || 5 * 60 * 1000));
+const myshipProductUrl = String(process.env.MYSHIP_PRODUCT_URL || "https://myship.7-11.com.tw/general/detail/GM2506169881759").trim();
+const myshipFacebookEmail = String(process.env.MYSHIP_FACEBOOK_EMAIL || "").trim();
+const myshipFacebookPassword = String(process.env.MYSHIP_FACEBOOK_PASSWORD || "").trim();
+const myshipAutoOrderEnabled = parseEnvFlag(process.env.MYSHIP_AUTO_ORDER_ENABLED, false);
+const myshipAutoOrderIntervalMs = Math.max(60000, Number(process.env.MYSHIP_AUTO_ORDER_INTERVAL_MS || 5 * 60 * 1000));
+const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "totalAmount").trim();
+const myshipDefaultTimeoutMs = Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000);
+const myshipNavTimeoutMs = Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000);
 let mallbicSyncRunning = false;
 let mallbicOrderSyncRunning = false;
 let mallbicOrderStatusSyncRunning = false;
+let myshipOrderSyncRunning = false;
 let adminChatEventId = 0;
 const adminChatClients = new Set();
 
@@ -62,6 +72,18 @@ const defaultMallbicSyncStatus = {
 const defaultMallbicOrderSyncStatus = {
   enabled: mallbicOrderAutoSyncEnabled,
   intervalMs: mallbicOrderAutoSyncIntervalMs,
+  running: false,
+  lastTrigger: "",
+  lastRunAt: "",
+  lastFinishedAt: "",
+  lastSuccessAt: "",
+  lastError: "",
+  lastResult: null
+};
+
+const defaultMyshipOrderSyncStatus = {
+  enabled: myshipAutoOrderEnabled,
+  intervalMs: myshipAutoOrderIntervalMs,
   running: false,
   lastTrigger: "",
   lastRunAt: "",
@@ -297,6 +319,7 @@ async function ensureStore() {
   await ensureJsonFile(catalogFile, defaultCatalog);
   await ensureJsonFile(mallbicSyncFile, defaultMallbicSyncStatus);
   await ensureJsonFile(mallbicOrderSyncFile, defaultMallbicOrderSyncStatus);
+  await ensureJsonFile(myshipOrderSyncFile, defaultMyshipOrderSyncStatus);
 }
 
 async function ensureJsonFile(filePath, fallback) {
@@ -351,6 +374,7 @@ function normalizeOrders(orders) {
     nextOrder.status = normalizeOrderStatus(nextOrder.status);
     nextOrder.cancelRequest = normalizeCancelRequest(nextOrder.cancelRequest);
     nextOrder.mallbic = normalizeOrderMallbicSync(nextOrder);
+    nextOrder.myship = normalizeOrderMyshipSync(nextOrder);
     return nextOrder;
   });
 }
@@ -451,6 +475,30 @@ function normalizeOrderMallbicSync(order) {
   };
 }
 
+function normalizeOrderMyshipSync(order) {
+  const current = order.myship && typeof order.myship === "object" ? order.myship : {};
+  const isSevenEleven = isSevenElevenOrder(order);
+  const rawStatus = String(current.createStatus || "").trim();
+  const createStatus = ["pending", "creating", "created", "failed", "skipped", "notNeeded"].includes(rawStatus)
+    ? rawStatus
+    : isSevenEleven ? "pending" : "notNeeded";
+
+  return {
+    createStatus: isSevenEleven ? createStatus : "notNeeded",
+    createdAt: String(current.createdAt || ""),
+    updatedAt: String(current.updatedAt || ""),
+    error: String(current.error || ""),
+    productUrl: String(current.productUrl || myshipProductUrl || ""),
+    quantity: Math.max(0, Number(current.quantity || 0)),
+    orderNo: String(current.orderNo || ""),
+    lastScreenshot: String(current.lastScreenshot || "")
+  };
+}
+
+function isSevenElevenOrder(order) {
+  return String(order?.deliveryMethod || "").includes("7-11");
+}
+
 function isMallbicPostImportLookupError(error) {
   const message = String(error || "");
   return message.includes("select.platform-select") || message.includes("平台篩選欄位");
@@ -522,6 +570,28 @@ async function writeMallbicOrderSyncStatus(status) {
     running: typeof status.running === "boolean" ? status.running : mallbicOrderSyncRunning
   };
   await writeJson(mallbicOrderSyncFile, nextStatus);
+  return nextStatus;
+}
+
+async function readMyshipOrderSyncStatus() {
+  return {
+    ...defaultMyshipOrderSyncStatus,
+    ...await readJson(myshipOrderSyncFile, defaultMyshipOrderSyncStatus),
+    enabled: myshipAutoOrderEnabled,
+    intervalMs: myshipAutoOrderIntervalMs,
+    running: myshipOrderSyncRunning
+  };
+}
+
+async function writeMyshipOrderSyncStatus(status) {
+  const nextStatus = {
+    ...defaultMyshipOrderSyncStatus,
+    ...status,
+    enabled: myshipAutoOrderEnabled,
+    intervalMs: myshipAutoOrderIntervalMs,
+    running: typeof status.running === "boolean" ? status.running : myshipOrderSyncRunning
+  };
+  await writeJson(myshipOrderSyncFile, nextStatus);
   return nextStatus;
 }
 
@@ -1285,6 +1355,459 @@ app.get("/api/admin/mallbic/order-sync-status", async (_req, res) => {
     statusUpdateRunning: mallbicOrderStatusSyncRunning
   });
 });
+
+app.post("/api/admin/myship/create-orders", async (_req, res) => {
+  if (myshipOrderSyncRunning) {
+    return res.status(409).json({ message: "賣貨便建單正在執行中，請稍後再試" });
+  }
+
+  try {
+    res.json(await runMyshipOrderSync("manual"));
+  } catch (error) {
+    console.error("MyShip order sync failed:", error);
+    res.status(500).json({ message: `賣貨便建單失敗：${getErrorMessage(error)}` });
+  }
+});
+
+app.get("/api/admin/myship/order-sync-status", async (_req, res) => {
+  const orders = await readOrders();
+  res.json({
+    ...await readMyshipOrderSyncStatus(),
+    pendingCreate: orders.filter((order) => shouldCreateOrderInMyship(order)).length,
+    productUrl: myshipProductUrl,
+    amountSource: myshipAmountSource,
+    missingKeys: missingMyshipKeys()
+  });
+});
+
+function missingMyshipKeys() {
+  return [
+    ["MYSHIP_PRODUCT_URL", myshipProductUrl],
+    ["MYSHIP_FACEBOOK_EMAIL", myshipFacebookEmail],
+    ["MYSHIP_FACEBOOK_PASSWORD", myshipFacebookPassword]
+  ].filter(([, value]) => !String(value || "").trim()).map(([key]) => key);
+}
+
+function getMyshipCredentials() {
+  const missingKeys = missingMyshipKeys();
+  if (missingKeys.length) {
+    throw new Error(`請先在 Render 環境變數設定 ${missingKeys.join(", ")}`);
+  }
+  return {
+    productUrl: myshipProductUrl,
+    email: myshipFacebookEmail,
+    password: myshipFacebookPassword
+  };
+}
+
+function shouldCreateOrderInMyship(order) {
+  if (!isSevenElevenOrder(order)) return false;
+  if (normalizeOrderStatus(order.status) === "cancelled") return false;
+  const status = normalizeOrderMyshipSync(order).createStatus;
+  return !["created", "creating", "skipped", "notNeeded"].includes(status);
+}
+
+function getMyshipOrderQuantity(order) {
+  const quantity = Number(order?.[myshipAmountSource]);
+  const fallbackQuantity = Number(order?.totalAmount || order?.productTotal || 0);
+  return Math.max(1, Math.round(Number.isFinite(quantity) && quantity > 0 ? quantity : fallbackQuantity));
+}
+
+async function runMyshipOrderSync(trigger) {
+  if (myshipOrderSyncRunning) throw new Error("賣貨便建單正在執行中，請稍後再試");
+
+  const credentials = getMyshipCredentials();
+  const startedAt = new Date().toISOString();
+  myshipOrderSyncRunning = true;
+  await writeMyshipOrderSyncStatus({
+    ...await readMyshipOrderSyncStatus(),
+    running: true,
+    lastTrigger: trigger,
+    lastRunAt: startedAt,
+    lastFinishedAt: "",
+    lastError: ""
+  });
+
+  const result = {
+    pendingCreate: 0,
+    createdOrders: 0,
+    failedOrders: 0,
+    created: [],
+    failed: []
+  };
+
+  try {
+    const orders = await readOrders();
+    const targetOrders = orders.filter((order) => shouldCreateOrderInMyship(order));
+    result.pendingCreate = targetOrders.length;
+
+    if (targetOrders.length > 0) {
+      const runningAt = new Date().toISOString();
+      for (const order of targetOrders) {
+        order.myship = normalizeOrderMyshipSync(order);
+        order.myship.createStatus = "creating";
+        order.myship.updatedAt = runningAt;
+        order.myship.error = "";
+        order.myship.productUrl = credentials.productUrl;
+        order.myship.quantity = getMyshipOrderQuantity(order);
+      }
+      await writeOrders(orders);
+
+      try {
+        await withMyshipPage(async (page) => {
+          await myshipLoginWithFacebook(page, credentials);
+
+          for (const order of targetOrders) {
+            try {
+              const created = await createMyshipOrder(page, order, credentials);
+              const now = new Date().toISOString();
+              order.myship.createStatus = "created";
+              order.myship.createdAt = now;
+              order.myship.updatedAt = now;
+              order.myship.error = "";
+              order.myship.orderNo = created.orderNo || "";
+              order.myship.lastScreenshot = "";
+              result.createdOrders += 1;
+              result.created.push({ orderId: order.id, orderNo: order.myship.orderNo, quantity: order.myship.quantity });
+            } catch (error) {
+              const screenshot = await myshipSaveScreenshot(page, `myship-order-failed-${order.id}`).catch(() => "");
+              const message = getErrorMessage(error);
+              order.myship.createStatus = "failed";
+              order.myship.updatedAt = new Date().toISOString();
+              order.myship.error = message;
+              order.myship.lastScreenshot = screenshot;
+              result.failedOrders += 1;
+              result.failed.push({ orderId: order.id, message, screenshot });
+            }
+          }
+        });
+      } catch (error) {
+        const message = getErrorMessage(error);
+        for (const order of targetOrders) {
+          if (order.myship?.createStatus === "created") continue;
+          order.myship = normalizeOrderMyshipSync(order);
+          order.myship.createStatus = "failed";
+          order.myship.updatedAt = new Date().toISOString();
+          order.myship.error = message;
+          result.failedOrders += 1;
+          result.failed.push({ orderId: order.id, message, screenshot: "" });
+        }
+      }
+
+      await writeOrders(orders);
+    }
+
+    const finishedAt = new Date().toISOString();
+    const lastError = result.failed.map((item) => `${item.orderId}: ${item.message}`).join("；");
+    await writeMyshipOrderSyncStatus({
+      running: false,
+      lastTrigger: trigger,
+      lastRunAt: startedAt,
+      lastFinishedAt: finishedAt,
+      lastSuccessAt: result.failedOrders === 0 ? finishedAt : (await readMyshipOrderSyncStatus()).lastSuccessAt,
+      lastError,
+      lastResult: result
+    });
+
+    return result;
+  } catch (error) {
+    const finishedAt = new Date().toISOString();
+    await writeMyshipOrderSyncStatus({
+      running: false,
+      lastTrigger: trigger,
+      lastRunAt: startedAt,
+      lastFinishedAt: finishedAt,
+      lastError: getErrorMessage(error)
+    });
+    throw error;
+  } finally {
+    myshipOrderSyncRunning = false;
+    const currentStatus = await readMyshipOrderSyncStatus();
+    if (currentStatus.running) await writeMyshipOrderSyncStatus({ ...currentStatus, running: false });
+  }
+}
+
+async function withMyshipPage(task) {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-dev-shm-usage"]
+  });
+
+  try {
+    const context = await browser.newContext({ locale: "zh-TW" });
+    const page = await context.newPage();
+    page.setDefaultTimeout(myshipDefaultTimeoutMs);
+    page.setDefaultNavigationTimeout(myshipNavTimeoutMs);
+    page.on("dialog", async (dialog) => {
+      await dialog.accept().catch(() => {});
+    });
+    return await task(page);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function myshipLoginWithFacebook(page, credentials) {
+  await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  await myshipDismissDialogs(page);
+
+  const bodyText = await myshipBodyText(page);
+  if (!bodyText.includes("Facebook 登入") && !bodyText.includes("登入")) {
+    return;
+  }
+
+  const context = page.context();
+  const popupPromise = context.waitForEvent("page", { timeout: 10000 }).catch(() => null);
+  await myshipClickFirst(page, [
+    "button.btn-soclial-login-facebook",
+    "form[action*='ExternalLogin'] button[name='provider']",
+    "button:has-text('Facebook 登入')",
+    "button:has-text('Facebook')"
+  ], "Facebook 登入");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => null),
+    wait(2500)
+  ]);
+
+  const popup = await popupPromise;
+  const facebookPage = popup || context.pages().find((entry) => entry.url().includes("facebook.com")) || (page.url().includes("facebook.com") ? page : null);
+
+  if (!facebookPage) {
+    await page.waitForTimeout(2000);
+    const afterClickText = await myshipBodyText(page);
+    if (!afterClickText.includes("Facebook 登入") && !afterClickText.includes("登入")) return;
+    throw new Error("賣貨便沒有開啟 Facebook 登入頁，請確認賣貨便登入流程是否改版");
+  }
+
+  await facebookPage.waitForLoadState("domcontentloaded").catch(() => {});
+  const challengeBeforeLogin = await myshipDetectFacebookChallenge(facebookPage);
+  if (challengeBeforeLogin) throw new Error(challengeBeforeLogin);
+
+  const emailInput = facebookPage.locator("input[name='email'], input#email").first();
+  if (await emailInput.count()) {
+    await emailInput.fill(credentials.email);
+  }
+  const passInput = facebookPage.locator("input[name='pass'], input#pass").first();
+  if (await passInput.count()) {
+    await passInput.fill(credentials.password);
+  }
+
+  await myshipClickFirst(facebookPage, [
+    "button[name='login']",
+    "input[name='login']",
+    "button[type='submit']",
+    "input[type='submit']"
+  ], "Facebook 登入送出");
+
+  await Promise.race([
+    facebookPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
+    wait(5000)
+  ]);
+
+  const challengeAfterLogin = await myshipDetectFacebookChallenge(facebookPage);
+  if (challengeAfterLogin) throw new Error(challengeAfterLogin);
+
+  if (facebookPage !== page) {
+    await page.bringToFront().catch(() => {});
+    await page.waitForTimeout(3000);
+  } else if (!page.url().includes("myship.7-11.com.tw")) {
+    await page.waitForURL(/myship\.7-11\.com\.tw/, { timeout: 30000 }).catch(() => {});
+  }
+
+  await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  const text = await myshipBodyText(page);
+  if (text.includes("Facebook 登入") && text.includes("為保障交易安全")) {
+    throw new Error("Facebook 登入沒有完成，可能需要手機驗證、雙重驗證或安全檢查");
+  }
+}
+
+async function createMyshipOrder(page, order, credentials) {
+  const quantity = getMyshipOrderQuantity(order);
+  await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  await myshipDismissDialogs(page);
+
+  await myshipClickFirst(page, [
+    ".product_size_switch span[data-spec-name='金額']",
+    ".product_size_switch span[data-spec-price='1']"
+  ], "賣貨便金額規格");
+
+  await page.locator("input.qty.available").first().fill(String(quantity));
+  await myshipClickFirst(page, [
+    "button[onclick*='addAndCreateCart']",
+    "button.btn-addtocart:has-text('直接結帳')"
+  ], "賣貨便直接結帳");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
+    wait(4000)
+  ]);
+  await myshipDismissDialogs(page);
+
+  const stillLogin = await myshipBodyText(page);
+  if (stillLogin.includes("Facebook 登入") && stillLogin.includes("為保障交易安全")) {
+    throw new Error("賣貨便要求重新登入，Facebook 登入沒有成功");
+  }
+
+  const filled = await myshipFillCheckoutData(page, order);
+  if (!filled.name || !filled.phone) {
+    throw new Error("賣貨便結帳頁找不到可填的姓名或手機欄位，請提供結帳頁截圖讓我補欄位");
+  }
+  if (isSevenElevenOrder(order) && !filled.store) {
+    throw new Error("賣貨便結帳頁找不到可填的 7-11 門市欄位，可能需要另開賣貨便門市地圖流程");
+  }
+
+  await myshipClickFirst(page, [
+    "button:has-text('確認送出')",
+    "button:has-text('送出訂單')",
+    "button:has-text('送出')",
+    "button:has-text('下一步')",
+    "input[type='submit']"
+  ], "賣貨便送出訂單");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
+    wait(5000)
+  ]);
+  await myshipDismissDialogs(page);
+
+  const text = await myshipBodyText(page);
+  const orderNo = extractMyshipOrderNo(text);
+  if (!orderNo && !/成功|完成|成立|訂單/.test(text)) {
+    throw new Error("賣貨便沒有出現建單成功訊息，請檢查後台截圖或賣貨便是否有未填欄位");
+  }
+
+  return { orderNo };
+}
+
+async function myshipFillCheckoutData(page, order) {
+  const store = order.sevenElevenStore || {};
+  return page.evaluate(({ name, phone, storeId, storeName, storeAddress }) => {
+    const inputs = [...document.querySelectorAll("input, textarea")];
+    const visibleInputs = inputs.filter((input) => {
+      const type = String(input.getAttribute("type") || "").toLowerCase();
+      if (["hidden", "button", "submit", "checkbox", "radio"].includes(type)) return false;
+      if (input.disabled || input.readOnly) return false;
+      const rect = input.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    const normalize = (value) => String(value || "").toLowerCase();
+    const describe = (input) => normalize([
+      input.name,
+      input.id,
+      input.placeholder,
+      input.title,
+      input.getAttribute("aria-label"),
+      input.closest("label")?.innerText,
+      input.parentElement?.innerText
+    ].filter(Boolean).join(" "));
+    const setValue = (input, value) => {
+      input.focus();
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    const fillMatching = (words, value) => {
+      if (!value) return 0;
+      let count = 0;
+      for (const input of visibleInputs) {
+        const info = describe(input);
+        if (!words.some((word) => info.includes(word))) continue;
+        setValue(input, value);
+        count += 1;
+      }
+      return count;
+    };
+
+    const nameCount = fillMatching(["receivername", "recipientname", "consigneename", "收件人", "取件人", "姓名", "名字"], name);
+    const phoneCount = fillMatching(["receivermobile", "recipientmobile", "mobile", "phone", "tel", "手機", "電話"], phone);
+    const storeIdCount = fillMatching(["storeid", "cvsstoreid", "門市代號", "店號"], storeId);
+    const storeNameCount = fillMatching(["storename", "cvsstorename", "門市名稱", "門市店名", "店名"], storeName);
+    const storeAddressCount = fillMatching(["storeaddress", "cvsaddress", "門市地址", "地址"], storeAddress);
+
+    return {
+      name: nameCount > 0,
+      phone: phoneCount > 0,
+      store: storeIdCount + storeNameCount + storeAddressCount > 0
+    };
+  }, {
+    name: order.customerName || "",
+    phone: order.phone || "",
+    storeId: store.id || "",
+    storeName: store.name || "",
+    storeAddress: store.address || order.deliveryAddress || ""
+  });
+}
+
+async function myshipDismissDialogs(page) {
+  for (const selector of [
+    "#alertify-ok",
+    ".alertify-button-ok",
+    "button.mfp-close",
+    "button.close",
+    "button:has-text('OK')",
+    "button:has-text('確定')"
+  ]) {
+    const locator = page.locator(selector).first();
+    if (await locator.count()) {
+      await locator.click({ timeout: 1500 }).catch(() => {});
+    }
+  }
+}
+
+async function myshipClickFirst(page, selectors, label) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    if (!await locator.count()) continue;
+    try {
+      await locator.click({ timeout: 8000 });
+      return true;
+    } catch {
+      try {
+        await locator.click({ timeout: 8000, force: true });
+        return true;
+      } catch {
+        // try the next selector
+      }
+    }
+  }
+  throw new Error(`找不到賣貨便按鈕/欄位：${label}`);
+}
+
+async function myshipBodyText(page) {
+  return page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+}
+
+async function myshipDetectFacebookChallenge(page) {
+  const url = page.url();
+  const text = await myshipBodyText(page);
+  if (!url.includes("facebook.com")) return "";
+  if (/checkpoint|captcha|recover|two_factor|approvals|login_help/i.test(url)) {
+    return "Facebook 出現安全驗證，請先人工登入一次或改用不會觸發驗證的帳號";
+  }
+  if (/驗證|安全檢查|雙重驗證|確認身分|captcha|checkpoint/i.test(text)) {
+    return "Facebook 出現安全驗證，請先人工登入一次或改用不會觸發驗證的帳號";
+  }
+  return "";
+}
+
+function extractMyshipOrderNo(text) {
+  const cleanText = String(text || "");
+  const match = cleanText.match(/(?:訂單編號|訂單號碼|訂單號|交易編號)[^\nA-Z0-9]*([A-Z0-9-]{6,})/i);
+  return match ? match[1] : "";
+}
+
+async function myshipSaveScreenshot(page, prefix) {
+  const cleanPrefix = String(prefix || "myship-error").replace(/[^\w.-]+/g, "-").slice(0, 80);
+  const filename = `${cleanPrefix}-${Date.now()}.png`;
+  const filePath = path.join(dataDir, filename);
+  await page.screenshot({ path: filePath, fullPage: true });
+  return filename;
+}
 
 function getMallbicCredentials() {
   const account = String(process.env.MALLBIC_ACCOUNT || "").trim();
@@ -2817,12 +3340,24 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
       cancelledAt: "",
       cancelError: ""
     },
+    myship: {
+      createStatus: cleanDeliveryMethod === sevenElevenDeliveryMethod ? "pending" : "notNeeded",
+      createdAt: "",
+      updatedAt: "",
+      error: "",
+      productUrl: myshipProductUrl,
+      quantity: 0,
+      orderNo: "",
+      lastScreenshot: ""
+    },
     createdAt: new Date().toISOString()
   };
 
   const orders = await readOrders();
   orders.push(order);
   await writeOrders(orders);
+
+  queueMyshipOrderSync("order-created");
 
   res.status(201).json({ order, summary: buildOrderSummary(order) });
 });
@@ -2932,8 +3467,45 @@ function startMallbicOrderAutoSync() {
   setInterval(runAutoSync, mallbicOrderAutoSyncIntervalMs);
 }
 
+function queueMyshipOrderSync(trigger) {
+  if (!myshipAutoOrderEnabled) return;
+  if (myshipOrderSyncRunning) return;
+  if (missingMyshipKeys().length) {
+    console.warn("MyShip auto order sync is enabled, but MYSHIP_* variables are not fully set.");
+    return;
+  }
+
+  setTimeout(async () => {
+    if (myshipOrderSyncRunning) return;
+    try {
+      const result = await runMyshipOrderSync(trigger);
+      console.log(`MyShip order sync finished. Created ${result.createdOrders} orders, failed ${result.failedOrders}.`);
+    } catch (error) {
+      console.error("MyShip order sync failed:", error);
+    }
+  }, 1000);
+}
+
+function startMyshipOrderAutoSync() {
+  if (!myshipAutoOrderEnabled) {
+    console.log("MyShip order sync is disabled.");
+    return;
+  }
+
+  if (missingMyshipKeys().length) {
+    console.warn("MyShip order sync is enabled, but MYSHIP_* variables are not fully set.");
+    return;
+  }
+
+  const intervalMinutes = Math.round(myshipAutoOrderIntervalMs / 60000);
+  console.log(`MyShip order sync enabled. Interval: ${intervalMinutes} minutes.`);
+  setTimeout(() => queueMyshipOrderSync("auto"), myshipAutoOrderIntervalMs);
+  setInterval(() => queueMyshipOrderSync("auto"), myshipAutoOrderIntervalMs);
+}
+
 app.listen(port, () => {
   console.log(`LINE slipper order system running at http://localhost:${port}`);
   startMallbicAutoSync();
   startMallbicOrderAutoSync();
+  startMyshipOrderAutoSync();
 });
