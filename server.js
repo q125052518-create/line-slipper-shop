@@ -1376,7 +1376,13 @@ app.get("/api/admin/myship/order-sync-status", async (_req, res) => {
     pendingCreate: orders.filter((order) => shouldCreateOrderInMyship(order)).length,
     productUrl: myshipProductUrl,
     amountSource: myshipAmountSource,
-    missingKeys: missingMyshipKeys()
+    missingKeys: missingMyshipKeys(),
+    credentialHint: {
+      facebookAccountSet: Boolean(myshipFacebookEmail),
+      facebookAccountLength: myshipFacebookEmail.length,
+      facebookPasswordSet: Boolean(myshipFacebookPassword),
+      facebookPasswordLength: myshipFacebookPassword.length
+    }
   });
 });
 
@@ -1681,6 +1687,10 @@ async function myshipLoginWithFacebook(page, credentials) {
       facebookPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null),
       wait(3000)
     ]);
+  }
+
+  if (facebookPage.url().includes("facebook.com")) {
+    throw new Error("Facebook 登入未完成，仍停在 Facebook 登入頁；請確認賣貨便 Facebook 帳密是否正確，或帳號是否需要手機驗證/安全驗證");
   }
 
   if (facebookPage !== page) {
