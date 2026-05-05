@@ -1612,10 +1612,7 @@ async function myshipLoginWithFacebook(page, credentials) {
   await page.waitForTimeout(1500);
   await myshipDismissDialogs(page);
 
-  const bodyText = await myshipBodyText(page);
-  if (!bodyText.includes("Facebook 登入") && !bodyText.includes("登入")) {
-    return;
-  }
+  if (!await myshipIsFacebookLoginVisible(page)) return;
 
   const context = page.context();
   const popupPromise = context.waitForEvent("page", { timeout: 10000 }).catch(() => null);
@@ -1678,9 +1675,9 @@ async function myshipLoginWithFacebook(page, credentials) {
 
   await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
-  const text = await myshipBodyText(page);
-  if (text.includes("Facebook 登入") && text.includes("為保障交易安全")) {
-    throw new Error("Facebook 登入沒有完成，可能需要手機驗證、雙重驗證或安全檢查");
+  await myshipDismissDialogs(page);
+  if (await myshipIsFacebookLoginVisible(page)) {
+    throw new Error("Facebook 登入沒有完成，賣貨便仍停在登入視窗，可能需要手機驗證、雙重驗證或安全檢查");
   }
 }
 
@@ -1689,6 +1686,9 @@ async function createMyshipOrder(page, order, credentials) {
   await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
   await myshipDismissDialogs(page);
+  if (await myshipIsFacebookLoginVisible(page)) {
+    throw new Error("賣貨便尚未登入，無法建立購物車，請確認 Facebook 帳密或安全驗證");
+  }
 
   await myshipClickFirst(page, [
     ".product_size_switch span[data-spec-name='金額']",
@@ -1905,7 +1905,6 @@ async function myshipDismissDialogs(page) {
     "#alertify-ok",
     ".alertify-button-ok",
     "button.mfp-close",
-    "button.close",
     "button:has-text('OK')",
     "button:has-text('確定')"
   ]) {
@@ -1914,6 +1913,14 @@ async function myshipDismissDialogs(page) {
       await locator.click({ timeout: 1500 }).catch(() => {});
     }
   }
+}
+
+async function myshipIsFacebookLoginVisible(page) {
+  return await page
+    .locator("#loginModal.show button.btn-soclial-login-facebook, .modal.show button.btn-soclial-login-facebook, button.btn-soclial-login-facebook:visible")
+    .first()
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
 }
 
 async function myshipClickFirst(page, selectors, label) {
