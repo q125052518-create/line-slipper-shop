@@ -166,6 +166,11 @@ function submitEcpayMapForm(action, fields) {
 
 async function openSevenElevenStoreSelector() {
   saveCheckoutDraft();
+  const originalButtonText = openSevenElevenMapButtonEl?.textContent || "選擇 7-11 門市";
+  if (openSevenElevenMapButtonEl) {
+    openSevenElevenMapButtonEl.disabled = true;
+    openSevenElevenMapButtonEl.textContent = "開啟中...";
+  }
   messageEl.textContent = "正在開啟 7-11 門市選擇...";
 
   try {
@@ -185,8 +190,23 @@ async function openSevenElevenStoreSelector() {
       ? `（缺少 ${data.missingKeys.join("、")}）`
       : "";
     messageEl.textContent = data.message || `尚未設定綠界電子地圖${missingText}`;
+    if (openSevenElevenMapButtonEl) {
+      openSevenElevenMapButtonEl.textContent = "設定未完成";
+    }
+    messageEl.scrollIntoView({ block: "center", behavior: "smooth" });
   } catch {
     messageEl.textContent = "電子地圖開啟失敗，請稍後再試。";
+    if (openSevenElevenMapButtonEl) {
+      openSevenElevenMapButtonEl.textContent = "開啟失敗";
+    }
+    messageEl.scrollIntoView({ block: "center", behavior: "smooth" });
+  } finally {
+    window.setTimeout(() => {
+      if (openSevenElevenMapButtonEl) {
+        openSevenElevenMapButtonEl.disabled = false;
+        openSevenElevenMapButtonEl.textContent = originalButtonText;
+      }
+    }, 1500);
   }
 }
 
