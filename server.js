@@ -1686,11 +1686,21 @@ async function createMyshipOrder(page, order, credentials) {
     "button.btn-addtocart:has-text('直接結帳')"
   ], "賣貨便直接結帳");
 
-  await Promise.race([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }),
-    page.waitForURL(/\/cart\/confirm\//, { timeout: 30000 }),
-    page.locator("#btnNext, button#btnNext, input#btnNext").first().waitFor({ timeout: 30000 })
-  ]).catch(() => {});
+  let enteredCart = await myshipWaitForCartConfirm(page);
+  if (!enteredCart) {
+    await myshipClickFirst(page, [
+      "button[onclick*='addToCart']",
+      "button.btn-addtocart:has-text('加入購物車')"
+    ], "賣貨便加入購物車");
+    await page.waitForTimeout(1200);
+    await myshipDismissDialogs(page);
+    await myshipClickFirst(page, [
+      "button[onclick*='createCart']",
+      "button.btn-addtocart:has-text('直接結帳')",
+      "button:has-text('直接結帳')"
+    ], "賣貨便購物車直接結帳");
+    enteredCart = await myshipWaitForCartConfirm(page);
+  }
   await myshipDismissDialogs(page);
 
   const stillLogin = await myshipBodyText(page);
@@ -1729,6 +1739,15 @@ async function createMyshipOrder(page, order, credentials) {
   }
 
   return { orderNo };
+}
+
+async function myshipWaitForCartConfirm(page, timeout = 30000) {
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout }),
+    page.waitForURL(/\/cart\/confirm\//, { timeout }),
+    page.locator("#btnNext, button#btnNext, input#btnNext").first().waitFor({ timeout })
+  ]).catch(() => {});
+  return await page.locator("#btnNext, button#btnNext, input#btnNext").first().count() > 0;
 }
 
 async function myshipConfirmCartAmount(page, quantity) {
