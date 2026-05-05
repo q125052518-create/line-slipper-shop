@@ -1642,16 +1642,19 @@ async function myshipLoginWithFacebook(page, credentials) {
   const challengeBeforeLogin = await myshipDetectFacebookChallenge(facebookPage);
   if (challengeBeforeLogin) throw new Error(challengeBeforeLogin);
 
-  const emailInput = facebookPage.locator("input[name='email'], input#email").first();
+  const emailInput = facebookPage.locator("input[name='email'], input#email, input[autocomplete*='username']").first();
+  await emailInput.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   if (await emailInput.count()) {
     await emailInput.fill(credentials.email);
   }
-  const passInput = facebookPage.locator("input[name='pass'], input#pass").first();
+  const passInput = facebookPage.locator("input[name='pass'], input#pass, input[type='password']").first();
+  await passInput.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   if (await passInput.count()) {
     await passInput.fill(credentials.password);
   }
 
   await myshipClickFirst(facebookPage, [
+    "div[role='button']:has-text('登入')",
     "button[name='login']",
     "input[name='login']",
     "button[type='submit']",
@@ -1665,6 +1668,20 @@ async function myshipLoginWithFacebook(page, credentials) {
 
   const challengeAfterLogin = await myshipDetectFacebookChallenge(facebookPage);
   if (challengeAfterLogin) throw new Error(challengeAfterLogin);
+
+  if (facebookPage.url().includes("facebook.com")) {
+    await myshipClickOptional(facebookPage, [
+      "div[role='button']:has-text('繼續')",
+      "button:has-text('繼續')",
+      "input[type='submit']",
+      "div[role='button']:has-text('Continue')",
+      "button:has-text('Continue')"
+    ], "Facebook 繼續授權");
+    await Promise.race([
+      facebookPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null),
+      wait(3000)
+    ]);
+  }
 
   if (facebookPage !== page) {
     await page.bringToFront().catch(() => {});
@@ -1921,6 +1938,15 @@ async function myshipIsFacebookLoginVisible(page) {
     .first()
     .isVisible({ timeout: 1000 })
     .catch(() => false);
+}
+
+async function myshipClickOptional(page, selectors, label) {
+  try {
+    await myshipClickFirst(page, selectors, label);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function myshipClickFirst(page, selectors, label) {
