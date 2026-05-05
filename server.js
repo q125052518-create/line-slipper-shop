@@ -1380,6 +1380,21 @@ app.get("/api/admin/myship/order-sync-status", async (_req, res) => {
   });
 });
 
+app.get("/api/admin/myship/screenshots/:filename", async (req, res) => {
+  const filename = path.basename(String(req.params.filename || ""));
+  if (!filename || !filename.endsWith(".png")) {
+    return res.status(400).json({ message: "截圖檔名不正確" });
+  }
+
+  const screenshotPath = path.join(dataDir, filename);
+  try {
+    await fs.access(screenshotPath);
+    res.sendFile(screenshotPath);
+  } catch {
+    res.status(404).json({ message: "找不到截圖" });
+  }
+});
+
 function missingMyshipKeys() {
   return [
     ["MYSHIP_PRODUCT_URL", myshipProductUrl],
@@ -1903,21 +1918,34 @@ async function myshipDismissDialogs(page) {
 
 async function myshipClickFirst(page, selectors, label) {
   for (const selector of selectors) {
-    const locator = page.locator(selector).first();
-    if (!await locator.count()) continue;
-    try {
-      await locator.click({ timeout: 8000 });
-      return true;
-    } catch {
+    const locator = page.locator(selector);
+    const count = await locator.count();
+    if (!count) continue;
+
+    for (let index = 0; index < count; index += 1) {
+      const item = locator.nth(index);
+      if (!await item.isVisible().catch(() => false)) continue;
       try {
-        await locator.click({ timeout: 8000, force: true });
+        await item.click({ timeout: 8000 });
         return true;
       } catch {
         // try the next selector
       }
     }
+
+    for (let index = 0; index < count; index += 1) {
+      const item = locator.nth(index);
+      try {
+        await item.click({ timeout: 8000, force: true });
+        return true;
+      } catch {
+        // try the next matching element
+      }
+    }
   }
-  throw new Error(`找不到賣貨便按鈕/欄位：${label}`);
+
+  const bodyText = (await myshipBodyText(page)).replace(/\s+/g, " ").slice(0, 700);
+  throw new Error(`找不到賣貨便按鈕/欄位：${label}｜目前網址：${page.url()}｜頁面文字：${bodyText}`);
 }
 
 async function myshipBodyText(page) {
