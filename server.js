@@ -1687,9 +1687,10 @@ async function createMyshipOrder(page, order, credentials) {
   ], "賣貨便直接結帳");
 
   await Promise.race([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
-    wait(4000)
-  ]);
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }),
+    page.waitForURL(/\/cart\/confirm\//, { timeout: 30000 }),
+    page.locator("#btnNext, button#btnNext, input#btnNext").first().waitFor({ timeout: 30000 })
+  ]).catch(() => {});
   await myshipDismissDialogs(page);
 
   const stillLogin = await myshipBodyText(page);
@@ -1761,10 +1762,9 @@ async function myshipConfirmCartAmount(page, quantity) {
   ], "賣貨便購物車下一步");
 
   await Promise.race([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
-    page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 20000 }).catch(() => null),
-    wait(5000)
-  ]);
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }),
+    page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 30000 })
+  ]).catch(() => {});
   await myshipDismissDialogs(page);
 }
 
