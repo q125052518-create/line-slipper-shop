@@ -1527,12 +1527,56 @@ async function runMyshipOrderSync(trigger) {
   }
 }
 
-async function withMyshipPage(task) {
+async function launchChromiumBrowser() {
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({
+  await ensureChromiumBrowserInstalled(chromium);
+  return chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage"]
   });
+}
+
+async function ensureChromiumBrowserInstalled(chromium) {
+  const executablePath = chromium.executablePath();
+  try {
+    await fs.access(executablePath);
+    return;
+  } catch {}
+
+  const { spawn } = await import("child_process");
+  await new Promise((resolve, reject) => {
+    const command = process.platform === "win32" ? "npx.cmd" : "npx";
+    const child = spawn(command, ["playwright", "install", "chromium"], {
+      cwd: __dirname,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let output = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Playwright Chromium 安裝逾時"));
+    }, 5 * 60 * 1000);
+
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) return resolve();
+      reject(new Error(`Playwright Chromium 安裝失敗 (${code}): ${output.slice(-1200)}`));
+    });
+  });
+}
+
+async function withMyshipPage(task) {
+  const browser = await launchChromiumBrowser();
 
   try {
     const context = await browser.newContext({ locale: "zh-TW" });
@@ -2064,11 +2108,7 @@ function buildMallbicOrderImportWorkbook(orders) {
 }
 
 async function withMallbicPage(task) {
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-dev-shm-usage"]
-  });
+  const browser = await launchChromiumBrowser();
 
   try {
     const context = await browser.newContext({ acceptDownloads: true, locale: "zh-TW" });
@@ -3102,11 +3142,7 @@ async function cancelMallbicOrder(page, order) {
 }
 
 async function exportMallbicInventoryWorkbook({ account, password }) {
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-dev-shm-usage"]
-  });
+  const browser = await launchChromiumBrowser();
 
   try {
     const context = await browser.newContext({ acceptDownloads: true, locale: "zh-TW" });
