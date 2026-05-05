@@ -45,9 +45,9 @@ const mallbicOrderAutoSyncIntervalMs = Math.max(60000, Number(process.env.MALLBI
 const myshipProductUrl = String(process.env.MYSHIP_PRODUCT_URL || "https://myship.7-11.com.tw/general/detail/GM2506169881759").trim();
 const myshipFacebookEmail = String(process.env.MYSHIP_FACEBOOK_EMAIL || "").trim();
 const myshipFacebookPassword = String(process.env.MYSHIP_FACEBOOK_PASSWORD || "").trim();
-const myshipAutoOrderEnabled = parseEnvFlag(process.env.MYSHIP_AUTO_ORDER_ENABLED, false);
+const myshipAutoOrderEnabled = parseEnvFlag(process.env.MYSHIP_AUTO_ORDER_ENABLED, true);
 const myshipAutoOrderIntervalMs = Math.max(60000, Number(process.env.MYSHIP_AUTO_ORDER_INTERVAL_MS || 5 * 60 * 1000));
-const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "totalAmount").trim();
+const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "productTotal").trim();
 const myshipDefaultTimeoutMs = Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000);
 const myshipNavTimeoutMs = Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000);
 let mallbicSyncRunning = false;
@@ -1653,6 +1653,8 @@ async function createMyshipOrder(page, order, credentials) {
     throw new Error("賣貨便要求重新登入，Facebook 登入沒有成功");
   }
 
+  await myshipConfirmCartAmount(page, quantity);
+
   const filled = await myshipFillCheckoutData(page, order);
   if (!filled.name || !filled.phone) {
     throw new Error("賣貨便結帳頁找不到可填的姓名或手機欄位，請提供結帳頁截圖讓我補欄位");
@@ -1676,7 +1678,7 @@ async function createMyshipOrder(page, order, credentials) {
   await myshipDismissDialogs(page);
 
   const text = await myshipBodyText(page);
-  const orderNo = extractMyshipOrderNo(text);
+  const orderNo = extractMyshipOrderNo(`${text}\n${page.url()}`);
   if (!orderNo && !/成功|完成|成立|訂單/.test(text)) {
     throw new Error("賣貨便沒有出現建單成功訊息，請檢查後台截圖或賣貨便是否有未填欄位");
   }
@@ -1684,9 +1686,73 @@ async function createMyshipOrder(page, order, credentials) {
   return { orderNo };
 }
 
+async function myshipConfirmCartAmount(page, quantity) {
+  const hasRecipientFields = await page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").count();
+  if (hasRecipientFields) return;
+
+  const qtyInput = page.locator("input[name='Card_Qty_1'], input[id^='Card_Qty'], input[name*='Card_Qty'], input.qty").first();
+  if (await qtyInput.count()) {
+    await myshipSetInputValue(page, qtyInput, String(quantity));
+  }
+
+  const agree = page.locator("#Agree, input[name='Agree'], input[type='checkbox'][name*='Agree']").first();
+  if (await agree.count()) {
+    await agree.check({ force: true }).catch(async () => {
+      await page.evaluate((selector) => {
+        const input = document.querySelector(selector);
+        if (!input) return;
+        input.checked = true;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }, "#Agree");
+    });
+  }
+
+  await myshipClickFirst(page, [
+    "#btnNext",
+    "button#btnNext",
+    "input#btnNext",
+    "button:has-text('下一步')",
+    "button:has-text('確認')",
+    "input[type='submit']"
+  ], "賣貨便購物車下一步");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
+    page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 20000 }).catch(() => null),
+    wait(5000)
+  ]);
+  await myshipDismissDialogs(page);
+}
+
 async function myshipFillCheckoutData(page, order) {
   const store = order.sevenElevenStore || {};
   return page.evaluate(({ name, phone, storeId, storeName, storeAddress }) => {
+    const setElementValue = (element, value) => {
+      if (!element || value === undefined || value === null || value === "") return false;
+      if ("value" in element) {
+        element.focus?.();
+        element.value = value;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        element.textContent = value;
+      }
+      return true;
+    };
+    const setFirst = (selectors, value) => {
+      for (const selector of selectors) {
+        const element = document.querySelector(selector);
+        if (setElementValue(element, value)) return true;
+      }
+      return false;
+    };
+
+    const directName = setFirst(["#RcvName", "input[name='RcvName']", "#ReceiverName", "input[name='ReceiverName']"], name);
+    const directPhone = setFirst(["#RcvMobile", "input[name='RcvMobile']", "#ReceiverMobile", "input[name='ReceiverMobile']"], phone);
+    const directStoreId = setFirst(["#RcvStoreID", "input[name='RcvStoreID']", "#CvsStoreID", "input[name='CvsStoreID']", "input[name='StoreID']"], storeId);
+    const directStoreName = setFirst(["#RcvStoreName", "input[name='RcvStoreName']", "#CvsStoreName", "input[name='CvsStoreName']", "input[name='StoreName']"], storeName);
+    const directStoreAddress = setFirst(["#RcvStoreAddress", "input[name='RcvStoreAddress']", "#CvsStoreAddress", "input[name='CvsStoreAddress']", "input[name='StoreAddress']"], storeAddress);
+
     const inputs = [...document.querySelectorAll("input, textarea")];
     const visibleInputs = inputs.filter((input) => {
       const type = String(input.getAttribute("type") || "").toLowerCase();
@@ -1730,9 +1796,9 @@ async function myshipFillCheckoutData(page, order) {
     const storeAddressCount = fillMatching(["storeaddress", "cvsaddress", "門市地址", "地址"], storeAddress);
 
     return {
-      name: nameCount > 0,
-      phone: phoneCount > 0,
-      store: storeIdCount + storeNameCount + storeAddressCount > 0
+      name: directName || nameCount > 0,
+      phone: directPhone || phoneCount > 0,
+      store: directStoreId || directStoreName || directStoreAddress || storeIdCount + storeNameCount + storeAddressCount > 0
     };
   }, {
     name: order.customerName || "",
@@ -1741,6 +1807,19 @@ async function myshipFillCheckoutData(page, order) {
     storeName: store.name || "",
     storeAddress: store.address || order.deliveryAddress || ""
   });
+}
+
+async function myshipSetInputValue(page, locator, value) {
+  await locator.fill(value).catch(async () => {
+    const handle = await locator.elementHandle();
+    if (!handle) throw new Error("找不到賣貨便金額輸入欄位");
+    await page.evaluate(({ element, nextValue }) => {
+      element.value = nextValue;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }, { element: handle, nextValue: value });
+  });
+  await page.waitForTimeout(800);
 }
 
 async function myshipDismissDialogs(page) {
@@ -1798,7 +1877,9 @@ async function myshipDetectFacebookChallenge(page) {
 function extractMyshipOrderNo(text) {
   const cleanText = String(text || "");
   const match = cleanText.match(/(?:訂單編號|訂單號碼|訂單號|交易編號)[^\nA-Z0-9]*([A-Z0-9-]{6,})/i);
-  return match ? match[1] : "";
+  if (match) return match[1];
+  const directMatch = cleanText.match(/\bC[MC]\d{8,}\b/i);
+  return directMatch ? directMatch[0].toUpperCase() : "";
 }
 
 async function myshipSaveScreenshot(page, prefix) {
