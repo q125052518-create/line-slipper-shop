@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/styles.css">
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
-  <body>
+  <body class="storefront-page">
     <header class="app-header">
       <div>
         <p class="eyebrow">LINE Slipper Shop</p>
@@ -22,15 +22,70 @@
       </nav>
     </header>
 
-    <main class="shop-layout">
-      <section class="catalog-panel">
-        <div class="section-head">
-          <h2>選擇賣場</h2>
-          <select id="marketSelect"></select>
+    <main class="shop-layout shopee-style-layout">
+      <section class="storefront-cover">
+        <div class="store-profile-card">
+          <img id="storeAvatar" src="https://placehold.co/160x160/f2efe8/1e2720?text=Shop" alt="">
+          <div>
+            <p class="store-status">線上賣場</p>
+            <h2 id="storeName">拖鞋賣場</h2>
+            <p id="marketDescription">商品載入中</p>
+            <div class="store-profile-actions">
+              <a href="/chat.html" data-buyer-chat class="store-outline-button hidden">聊聊</a>
+            </div>
+          </div>
         </div>
-        <p id="marketDescription" class="muted"></p>
-        <div id="products" class="product-grid"></div>
-        <p id="message" class="message"></p>
+        <div class="store-meta-grid">
+          <span><strong id="storeProductCount">0</strong> 件商品</span>
+          <span><strong id="storeCategoryCount">0</strong> 個分類</span>
+          <span><strong>24H</strong> 線上下單</span>
+          <span><strong>7-11</strong> 門市取貨</span>
+        </div>
+      </section>
+
+      <nav id="storeTabs" class="store-tabs" aria-label="賣場導覽">
+        <button type="button" data-store-tab="store">賣場</button>
+        <button type="button" data-store-tab="products">商品</button>
+        <button type="button" data-store-tab="categories">分類</button>
+      </nav>
+
+      <section id="layoutBlocks" class="store-layout-blocks" aria-label="賣場布置"></section>
+      <section id="categoryDirectory" class="store-category-directory hidden" aria-label="全部分類"></section>
+
+      <section id="productShell" class="storefront-shell">
+        <aside class="store-sidebar">
+          <h2>商品分類</h2>
+          <div id="categoryLanding" class="shop-category-list" aria-label="商品分類"></div>
+        </aside>
+
+        <section class="store-product-area">
+          <div id="categoryView">
+            <div class="shop-toolbar">
+              <div>
+                <p class="eyebrow">Products</p>
+                <h2 id="categoryTitle">全部商品</h2>
+              </div>
+              <label class="shop-search">
+                <span>搜尋</span>
+                <input id="productSearch" type="search" placeholder="搜尋商品名稱">
+              </label>
+              <label class="shop-sort">
+                <span>排序</span>
+                <select id="productSort">
+                  <option value="default">綜合排序</option>
+                  <option value="price-asc">價格低到高</option>
+                  <option value="price-desc">價格高到低</option>
+                </select>
+              </label>
+            </div>
+            <div>
+              <div id="subCategoryLanding" class="sub-category-strip" aria-label="子分類"></div>
+              <div id="products" class="product-grid shop-product-grid"></div>
+            </div>
+          </div>
+
+          <p id="message" class="message"></p>
+        </section>
       </section>
     </main>
 

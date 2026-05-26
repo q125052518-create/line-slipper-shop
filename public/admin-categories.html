@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>分類管理</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Categories</p>
+        <h1>分類管理</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">我的商品</a>
+        <a class="admin-link is-current" href="/admin-categories.html">分類管理</a>
+        <a class="admin-link" href="/admin-stats.html">數據統計</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="editor-panel">
+        <div class="section-head">
+          <div>
+            <h2>分類管理</h2>
+            <p class="muted">可建立大分類與子分類。</p>
+          </div>
+          <button type="button" id="refreshCategories">重新整理</button>
+        </div>
+
+        <form id="categoryForm" class="category-form">
+          <label>
+            新分類名稱
+            <input name="name" placeholder="例如 厚底拖鞋" required>
+          </label>
+          <label>
+            上層分類
+            <select name="parentId"></select>
+          </label>
+          <button type="submit">新增分類</button>
+        </form>
+
+        <div id="categoryEditor" class="category-editor"></div>
+      </section>
+
+      <section class="editor-panel">
+        <div class="section-head">
+          <div>
+            <h2>大量將商品移入分類</h2>
+            <p class="muted">勾選多個商品後，選擇目標分類，一次移入。</p>
+          </div>
+        </div>
+
+        <div class="category-bulk-toolbar">
+          <label>
+            搜尋商品
+            <input id="categoryProductSearch" type="search" placeholder="輸入商品名稱、款式或品項條碼">
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="selectAllCategoryProducts">
+            全選商品
+          </label>
+          <label>
+            目標分類
+            <select id="bulkCategoryTarget"></select>
+          </label>
+          <button type="button" id="bulkMoveCategoryButton" disabled>移入分類</button>
+          <span class="bulk-selection-count" id="bulkCategorySelectionCount">已選 0 件</span>
+        </div>
+
+        <div id="categoryProductList" class="category-product-list"></div>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-categories.js"></script>
+  </body>
+</html>

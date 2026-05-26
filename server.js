@@ -24,11 +24,13 @@ const ecpayLogisticsMapUrl = String(process.env.ECPAY_LOGISTICS_MAP_URL || "http
 const ecpayLogisticsSubType = String(process.env.ECPAY_LOGISTICS_SUB_TYPE || "UNIMARTC2C").trim();
 const channelSecret = process.env.LINE_CHANNEL_SECRET || "";
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || "";
-const dataDir = path.join(__dirname, "data");
+const seedDataDir = path.join(__dirname, "data");
+const dataDir = path.resolve(process.env.DATA_DIR || seedDataDir);
 const ordersFile = path.join(dataDir, "orders.json");
 const buyersFile = path.join(dataDir, "buyers.json");
 const chatsFile = path.join(dataDir, "chats.json");
 const catalogFile = path.join(dataDir, "catalog.json");
+const storeLayoutFile = path.join(dataDir, "store-layout.json");
 const mallbicSyncFile = path.join(dataDir, "mallbic-sync.json");
 const mallbicOrderSyncFile = path.join(dataDir, "mallbic-order-sync.json");
 const mallbicOrderTemplateFile = path.join(dataDir, "mallbic-order-template.xls");
@@ -50,6 +52,9 @@ const myshipAutoOrderIntervalMs = Math.max(60000, Number(process.env.MYSHIP_AUTO
 const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "productTotal").trim();
 const myshipDefaultTimeoutMs = Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000);
 const myshipNavTimeoutMs = Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000);
+const myshipBrowserProfileDir = String(process.env.MYSHIP_BROWSER_PROFILE_DIR || path.join(dataDir, "myship-browser-profile")).trim();
+const myshipHeadless = parseEnvFlag(process.env.MYSHIP_HEADLESS, true);
+const myshipManualLoginWindowMs = Math.max(60000, Number(process.env.MYSHIP_MANUAL_LOGIN_WINDOW_MS || 3 * 60 * 1000));
 let mallbicSyncRunning = false;
 let mallbicOrderSyncRunning = false;
 let mallbicOrderStatusSyncRunning = false;
@@ -94,6 +99,16 @@ const defaultMyshipOrderSyncStatus = {
 };
 
 const defaultCatalog = {
+  categories: [
+    {
+      id: "default-category",
+      name: "一般商品",
+      imageUrl: "",
+      isActive: true,
+      parentId: "",
+      sortOrder: 0
+    }
+  ],
   markets: [
     {
       id: "summer-sale",
@@ -104,6 +119,7 @@ const defaultCatalog = {
         {
           id: "cloud-slide",
           name: "雲朵厚底拖鞋",
+          categoryId: "default-category",
           imageUrl: "https://images.unsplash.com/photo-1603487742131-4160ec999306?auto=format&fit=crop&w=900&q=80",
           description: "柔軟厚底，適合居家與外出。",
           variants: [
@@ -115,6 +131,7 @@ const defaultCatalog = {
         {
           id: "beach-basic",
           name: "海灘防滑拖鞋",
+          categoryId: "default-category",
           imageUrl: "https://images.unsplash.com/photo-1562273138-f46be4ebdf33?auto=format&fit=crop&w=900&q=80",
           description: "輕量止滑，適合浴室、泳池與海邊。",
           variants: [
@@ -123,6 +140,63 @@ const defaultCatalog = {
           ]
         }
       ]
+    }
+  ]
+};
+
+const defaultStoreLayout = {
+  version: 2,
+  blocks: [
+    {
+      id: "banner-default",
+      type: "banner",
+      title: "賣場看板",
+      enabled: true,
+      imageUrls: [],
+      linkUrl: "",
+      sortOrder: 0
+    },
+    {
+      id: "notice-default",
+      type: "notice",
+      title: "賣場公告",
+      enabled: true,
+      text: "新品陸續上架中，下單前可先聊聊確認現貨。",
+      sortOrder: 1
+    },
+    {
+      id: "category-grid-default",
+      type: "category-grid",
+      title: "分類區",
+      enabled: true,
+      categoryIds: [],
+      columns: 5,
+      sortOrder: 2
+    },
+    {
+      id: "featured-products-default",
+      type: "featured-products",
+      title: "主打商品",
+      enabled: true,
+      productIds: [],
+      limit: 6,
+      sortOrder: 3
+    },
+    {
+      id: "new-products-default",
+      type: "new-products",
+      title: "新上架",
+      enabled: true,
+      limit: 6,
+      sortOrder: 4
+    },
+    {
+      id: "hot-products-default",
+      type: "hot-products",
+      title: "熱銷商品",
+      enabled: true,
+      limit: 6,
+      sortOrder: 5
     }
   ]
 };
@@ -307,7 +381,7 @@ app.post("/api/admin/chats/:buyerId/messages", requireAdminApi, async (req, res)
   res.status(201).json(publicAdminChatView(conversation));
 });
 
-app.use(["/admin.html", "/admin-chat.html", "/admin-tools.html", "/admin-orders.html"], requireAdminPage);
+app.use(["/admin.html", "/admin-market.html", "/admin-categories.html", "/admin-layout.html", "/admin-chat.html", "/admin-tools.html", "/admin-orders.html", "/admin-stats.html"], requireAdminPage);
 app.use("/api/admin", requireAdminApi);
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -316,23 +390,48 @@ async function ensureStore() {
   await ensureJsonFile(ordersFile, []);
   await ensureJsonFile(buyersFile, []);
   await ensureJsonFile(chatsFile, []);
-  await ensureJsonFile(catalogFile, defaultCatalog);
+  await ensureJsonFile(catalogFile, defaultCatalog, path.join(seedDataDir, "catalog.json"));
+  await ensureJsonFile(storeLayoutFile, defaultStoreLayout, path.join(seedDataDir, "store-layout.json"));
   await ensureJsonFile(mallbicSyncFile, defaultMallbicSyncStatus);
   await ensureJsonFile(mallbicOrderSyncFile, defaultMallbicOrderSyncStatus);
   await ensureJsonFile(myshipOrderSyncFile, defaultMyshipOrderSyncStatus);
+  await ensureSeedFile(mallbicOrderTemplateFile, path.join(seedDataDir, "mallbic-order-template.xls"));
 }
 
-async function ensureJsonFile(filePath, fallback) {
+async function ensureSeedFile(filePath, seedFilePath) {
   try {
     await fs.access(filePath);
   } catch {
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.copyFile(seedFilePath, filePath);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+}
+
+async function ensureJsonFile(filePath, fallback, seedFilePath = "") {
+  try {
+    await fs.access(filePath);
+  } catch {
+    if (seedFilePath && path.resolve(seedFilePath) !== path.resolve(filePath)) {
+      try {
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.copyFile(seedFilePath, filePath);
+        return;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, `${JSON.stringify(fallback, null, 2)}\n`, "utf8");
   }
 }
 
 async function readJson(filePath, fallback) {
   await ensureStore();
-  const content = await fs.readFile(filePath, "utf8");
+  const content = (await fs.readFile(filePath, "utf8")).replace(/^\uFEFF/, "");
   return content.trim() ? JSON.parse(content) : fallback;
 }
 
@@ -505,11 +604,80 @@ function isMallbicPostImportLookupError(error) {
 }
 
 function normalizeCatalog(catalog) {
+  catalog.categories = Array.isArray(catalog.categories) ? catalog.categories : [];
+  catalog.categories = catalog.categories
+    .map((category, index) => ({
+      id: String(category.id || makeId("category")).trim(),
+      name: String(category.name || "").trim(),
+      imageUrl: String(category.imageUrl || "").trim(),
+      isActive: category.isActive !== false,
+      parentId: String(category.parentId || "").trim(),
+      sortOrder: Number.isFinite(Number(category.sortOrder)) ? Number(category.sortOrder) : index
+    }))
+    .filter((category) => category.id && category.name);
+  if (catalog.categories.length === 0) {
+    catalog.categories.push({
+      id: "default-category",
+      name: "一般商品",
+      imageUrl: "",
+      isActive: true,
+      parentId: "",
+      sortOrder: 0
+    });
+  }
+  const categoryIds = new Set(catalog.categories.map((category) => category.id));
+  for (const category of catalog.categories) {
+    category.parentId = category.parentId && categoryIds.has(category.parentId) && category.parentId !== category.id
+      ? category.parentId
+      : "";
+  }
+  for (const category of catalog.categories) {
+    const seen = new Set([category.id]);
+    let parentId = category.parentId;
+    while (parentId) {
+      if (seen.has(parentId)) {
+        category.parentId = "";
+        break;
+      }
+      seen.add(parentId);
+      parentId = catalog.categories.find((entry) => entry.id === parentId)?.parentId || "";
+    }
+  }
+
   catalog.markets = Array.isArray(catalog.markets) ? catalog.markets : [];
+  if (catalog.markets.length === 0) {
+    catalog.markets.push({
+      id: "main-market",
+      name: "拖鞋賣場",
+      imageUrl: "",
+      description: "",
+      isActive: true,
+      products: []
+    });
+  }
+
+  const mainMarket = catalog.markets[0];
+  const usedProductIds = new Set((mainMarket.products || []).map((product) => product.id).filter(Boolean));
+  for (const extraMarket of catalog.markets.slice(1)) {
+    for (const product of extraMarket.products || []) {
+      if (product.id && usedProductIds.has(product.id)) product.id = makeId("product");
+      if (product.id) usedProductIds.add(product.id);
+      (mainMarket.products ||= []).push(product);
+    }
+  }
+  catalog.markets = [mainMarket];
+
+  const activeCategoryIds = new Set(catalog.categories.map((category) => category.id));
+  const fallbackCategoryId = catalog.categories[0].id;
   for (const market of catalog.markets) {
+    market.id = String(market.id || "main-market").trim() || "main-market";
+    market.name = String(market.name || "拖鞋賣場").trim() || "拖鞋賣場";
+    market.description = String(market.description || "").trim();
+    market.isActive = market.isActive !== false;
     market.imageUrl = String(market.imageUrl || "").trim();
     market.products = Array.isArray(market.products) ? market.products : [];
     for (const product of market.products) {
+      product.categoryId = activeCategoryIds.has(product.categoryId) ? product.categoryId : fallbackCategoryId;
       product.variants = Array.isArray(product.variants) ? product.variants : [];
       for (const variant of product.variants) {
         const stock = Number(variant.stock);
@@ -521,12 +689,119 @@ function normalizeCatalog(catalog) {
   return catalog;
 }
 
+function normalizeStoreLayout(layout, catalog = null) {
+  const categoryIds = new Set((catalog?.categories || []).map((category) => category.id));
+  const productIds = new Set((catalog?.markets || []).flatMap((market) => (
+    (market.products || []).map((product) => product.id).filter(Boolean)
+  )));
+  const sourceBlocks = Array.isArray(layout?.blocks) ? layout.blocks : defaultStoreLayout.blocks;
+  const uniqueStringList = (items, allowedIds = null) => (
+    (Array.isArray(items) ? items : [])
+      .map((item) => String(item || "").trim())
+      .filter((item, index, list) => (
+        item &&
+        list.indexOf(item) === index &&
+        (!allowedIds?.size || allowedIds.has(item))
+      ))
+  );
+  const normalizeLimit = (value, fallback = 6) => Math.min(20, Math.max(1, Number.isFinite(Number(value)) ? Number(value) : fallback));
+  const normalizeBlock = (block, index) => {
+    const type = String(block.type || "").trim();
+    const base = {
+      id: String(block.id || makeId("layout-block")).trim() || makeId("layout-block"),
+      type,
+      title: String(block.title || "").trim(),
+      enabled: block.enabled !== false,
+      sortOrder: Number.isFinite(Number(block.sortOrder)) ? Number(block.sortOrder) : index
+    };
+
+    if (type === "banner") {
+      return {
+        ...base,
+        title: base.title || "賣場看板",
+        imageUrls: uniqueStringList(block.imageUrls),
+        linkUrl: String(block.linkUrl || "").trim()
+      };
+    }
+    if (type === "notice") {
+      return {
+        ...base,
+        title: base.title || "賣場公告",
+        text: String(block.text || "").trim()
+      };
+    }
+    if (type === "category-grid") {
+      return {
+        ...base,
+        title: base.title || "分類區",
+        categoryIds: uniqueStringList(block.categoryIds, categoryIds),
+        columns: Math.min(6, Math.max(3, Number.isFinite(Number(block.columns)) ? Number(block.columns) : 5))
+      };
+    }
+    if (type === "featured-products") {
+      return {
+        ...base,
+        title: base.title || "主打商品",
+        productIds: uniqueStringList(block.productIds, productIds),
+        limit: normalizeLimit(block.limit)
+      };
+    }
+    if (type === "new-products") {
+      return {
+        ...base,
+        title: base.title || "新上架",
+        limit: normalizeLimit(block.limit)
+      };
+    }
+    if (type === "hot-products") {
+      return {
+        ...base,
+        title: base.title || "熱銷商品",
+        limit: normalizeLimit(block.limit)
+      };
+    }
+    return null;
+  };
+
+  let blocks = sourceBlocks.map(normalizeBlock).filter(Boolean);
+  if (!blocks.length) blocks = defaultStoreLayout.blocks.map((block, index) => normalizeBlock(block, index)).filter(Boolean);
+
+  const layoutVersion = Number(layout?.version || 0);
+  const hasOnlyOldCategoryBlock = layoutVersion < 2 &&
+    blocks.length === 1 &&
+    blocks[0].type === "category-grid" &&
+    blocks[0].id === "category-grid-default";
+  if (hasOnlyOldCategoryBlock) {
+    const oldCategoryBlock = blocks[0];
+    blocks = defaultStoreLayout.blocks.map((block, index) => {
+      if (block.type === "category-grid") return normalizeBlock({ ...block, ...oldCategoryBlock, sortOrder: index }, index);
+      return normalizeBlock({ ...block, sortOrder: index }, index);
+    }).filter(Boolean);
+  }
+
+  blocks.sort((a, b) => a.sortOrder - b.sortOrder);
+  return {
+    version: defaultStoreLayout.version,
+    blocks: blocks.map((block, index) => ({ ...block, sortOrder: index }))
+  };
+}
+
 async function readCatalog() {
   return normalizeCatalog(await readJson(catalogFile, defaultCatalog));
 }
 
 async function writeCatalog(catalog) {
   return writeJson(catalogFile, normalizeCatalog(catalog));
+}
+
+async function readStoreLayout() {
+  const catalog = await readCatalog();
+  return normalizeStoreLayout(await readJson(storeLayoutFile, defaultStoreLayout), catalog);
+}
+
+async function writeStoreLayout(layout) {
+  const catalog = await readCatalog();
+  return writeJson(storeLayoutFile, normalizeStoreLayout(layout, catalog));
 }
 
 async function readMallbicSyncStatus() {
@@ -819,6 +1094,7 @@ function normalizeVariant(input, existingId) {
 
 function normalizeProduct(input, existingId) {
   const name = String(input.name || "").trim();
+  const categoryId = String(input.categoryId || "").trim();
   const imageUrl = String(input.imageUrl || "").trim();
   const description = String(input.description || "").trim();
   const variants = Array.isArray(input.variants) ? input.variants : [];
@@ -829,6 +1105,7 @@ function normalizeProduct(input, existingId) {
   return {
     id: existingId || input.id || makeId("product"),
     name,
+    categoryId,
     imageUrl,
     description,
     variants: variants.map((variant) => normalizeVariant(variant, variant.id))
@@ -1112,6 +1389,260 @@ function restoreOrderStock(catalog, order) {
   return restoredCount;
 }
 
+function buildAdminStats(orders, catalog, query) {
+  const now = new Date();
+  const from = parseStatsDate(query.from, false);
+  const to = parseStatsDate(query.to, true);
+  const statusFilter = normalizeStatsStatusFilter(query.status);
+  const variantLookup = buildVariantLookup(catalog);
+  const filteredOrders = orders.filter((order) => {
+    const createdAt = getOrderCreatedAt(order);
+    if (from && createdAt < from.getTime()) return false;
+    if (to && createdAt > to.getTime()) return false;
+    if (statusFilter !== "all" && normalizeOrderStatus(order.status) !== statusFilter) return false;
+    return true;
+  });
+
+  const summary = {
+    orderCount: filteredOrders.length,
+    activeOrderCount: 0,
+    cancelledOrderCount: 0,
+    pendingOrderCount: 0,
+    processingOrderCount: 0,
+    shippedOrderCount: 0,
+    cancelRequestCount: 0,
+    revenue: 0,
+    productRevenue: 0,
+    shippingRevenue: 0,
+    cancelledRevenue: 0,
+    itemQuantity: 0,
+    buyerCount: 0,
+    averageOrderValue: 0
+  };
+
+  const buyerKeys = new Set();
+  const statusMap = new Map();
+  const deliveryMap = new Map();
+  const dailyMap = new Map();
+  const itemMap = new Map();
+
+  for (const order of filteredOrders) {
+    const status = normalizeOrderStatus(order.status);
+    const isCancelled = status === "cancelled";
+    const totalAmount = getOrderTotalAmount(order);
+    const productTotal = getOrderProductTotal(order);
+    const shippingFee = getOrderShippingFee(order);
+    const quantity = getOrderItemQuantity(order);
+    const deliveryMethod = String(order.deliveryMethod || "未填寫").trim() || "未填寫";
+    const dayKey = formatStatsDateKey(order.createdAt);
+    const buyerKey = order.buyerId || normalizePhone(order.phone) || order.phone || order.customerName || "";
+
+    if (buyerKey) buyerKeys.add(buyerKey);
+    if (order.cancelRequest?.status === "pending") summary.cancelRequestCount += 1;
+
+    summary[`${status}OrderCount`] = Number(summary[`${status}OrderCount`] || 0) + 1;
+    if (isCancelled) {
+      summary.cancelledRevenue += totalAmount;
+    } else {
+      summary.activeOrderCount += 1;
+      summary.revenue += totalAmount;
+      summary.productRevenue += productTotal;
+      summary.shippingRevenue += shippingFee;
+      summary.itemQuantity += quantity;
+    }
+
+    addStatsBucket(statusMap, status, {
+      label: getOrderStatusLabel(status),
+      count: 1,
+      revenue: isCancelled ? 0 : totalAmount,
+      quantity: isCancelled ? 0 : quantity
+    });
+    addStatsBucket(deliveryMap, deliveryMethod, {
+      label: deliveryMethod,
+      count: 1,
+      revenue: isCancelled ? 0 : totalAmount,
+      quantity: isCancelled ? 0 : quantity
+    });
+    addStatsBucket(dailyMap, dayKey, {
+      label: dayKey,
+      count: isCancelled ? 0 : 1,
+      revenue: isCancelled ? 0 : totalAmount,
+      quantity: isCancelled ? 0 : quantity
+    });
+
+    if (!isCancelled) {
+      for (const item of order.items || []) {
+        const lookupKey = item.variantId || item.barcode || `${item.productId || ""}:${item.variantName || ""}`;
+        const catalogVariant = variantLookup.get(item.variantId) || variantLookup.get(item.barcode) || {};
+        const quantityValue = Math.max(0, Number(item.quantity || 0));
+        const revenueValue = Number.isFinite(Number(item.subtotal))
+          ? Math.max(0, Number(item.subtotal || 0))
+          : Math.max(0, Number(item.price || 0)) * quantityValue;
+        const current = itemMap.get(lookupKey) || {
+          key: lookupKey,
+          marketName: item.marketName || catalogVariant.marketName || "",
+          productName: item.productName || catalogVariant.productName || "",
+          variantName: item.variantName || catalogVariant.variantName || "",
+          barcode: item.barcode || catalogVariant.barcode || "",
+          imageUrl: item.variantImageUrl || catalogVariant.imageUrl || "",
+          stock: Number.isFinite(Number(catalogVariant.stock)) ? Number(catalogVariant.stock) : null,
+          quantity: 0,
+          revenue: 0,
+          orderIds: new Set()
+        };
+        current.quantity += quantityValue;
+        current.revenue += revenueValue;
+        current.orderIds.add(order.id);
+        itemMap.set(lookupKey, current);
+      }
+    }
+  }
+
+  summary.buyerCount = buyerKeys.size;
+  summary.cancelledOrderCount = filteredOrders.filter((order) => normalizeOrderStatus(order.status) === "cancelled").length;
+  summary.averageOrderValue = summary.activeOrderCount ? Math.round(summary.revenue / summary.activeOrderCount) : 0;
+
+  return {
+    generatedAt: now.toISOString(),
+    filters: {
+      from: query.from || "",
+      to: query.to || "",
+      status: statusFilter
+    },
+    summary,
+    statusBreakdown: buildStatsList(statusMap, ["pending", "processing", "shipped", "cancelled"]),
+    deliveryBreakdown: buildStatsList(deliveryMap),
+    dailySales: buildStatsList(dailyMap).sort((a, b) => String(a.key).localeCompare(String(b.key))),
+    topItems: [...itemMap.values()]
+      .map((item) => ({
+        ...item,
+        orderCount: item.orderIds.size,
+        orderIds: undefined
+      }))
+      .sort((a, b) => b.revenue - a.revenue || b.quantity - a.quantity)
+      .slice(0, 30),
+    recentOrders: filteredOrders
+      .slice()
+      .sort((a, b) => getOrderCreatedAt(b) - getOrderCreatedAt(a))
+      .slice(0, 20)
+      .map((order) => ({
+        id: order.id,
+        customerName: order.customerName || "",
+        phone: order.phone || "",
+        status: normalizeOrderStatus(order.status),
+        deliveryMethod: order.deliveryMethod || "",
+        totalAmount: getOrderTotalAmount(order),
+        itemQuantity: getOrderItemQuantity(order),
+        createdAt: order.createdAt || "",
+        mallbicImportStatus: order.mallbic?.importStatus || "",
+        myshipCreateStatus: order.myship?.createStatus || ""
+      }))
+  };
+}
+
+function parseStatsDate(value, endOfDay) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const timePart = endOfDay ? "T23:59:59.999+08:00" : "T00:00:00.000+08:00";
+  const date = new Date(`${text}${timePart}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function normalizeStatsStatusFilter(value) {
+  const text = String(value || "all").trim();
+  if (text === "all") return "all";
+  return normalizeOrderStatus(text);
+}
+
+function buildVariantLookup(catalog) {
+  const lookup = new Map();
+  for (const market of catalog.markets || []) {
+    for (const product of market.products || []) {
+      for (const variant of product.variants || []) {
+        const value = {
+          marketName: market.name || "",
+          productName: product.name || "",
+          variantName: variant.name || "",
+          barcode: variant.barcode || "",
+          imageUrl: variant.imageUrl || product.imageUrl || "",
+          stock: Number(variant.stock || 0)
+        };
+        if (variant.id) lookup.set(variant.id, value);
+        if (variant.barcode) lookup.set(variant.barcode, value);
+      }
+    }
+  }
+  return lookup;
+}
+
+function getOrderCreatedAt(order) {
+  const time = new Date(order.createdAt || order.updatedAt || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getOrderTotalAmount(order) {
+  const total = Number(order.totalAmount);
+  if (Number.isFinite(total) && total >= 0) return total;
+  return getOrderProductTotal(order) + getOrderShippingFee(order);
+}
+
+function getOrderProductTotal(order) {
+  const productTotal = Number(order.productTotal);
+  if (Number.isFinite(productTotal) && productTotal >= 0) return productTotal;
+  return (order.items || []).reduce((sum, item) => {
+    const subtotal = Number(item.subtotal);
+    if (Number.isFinite(subtotal) && subtotal >= 0) return sum + subtotal;
+    return sum + Math.max(0, Number(item.price || 0)) * Math.max(0, Number(item.quantity || 0));
+  }, 0);
+}
+
+function getOrderShippingFee(order) {
+  const shippingFee = Number(order.shippingFee);
+  return Number.isFinite(shippingFee) && shippingFee >= 0 ? shippingFee : 0;
+}
+
+function getOrderItemQuantity(order) {
+  return (order.items || []).reduce((sum, item) => sum + Math.max(0, Number(item.quantity || 0)), 0);
+}
+
+function getOrderStatusLabel(status) {
+  return {
+    pending: "新訂單",
+    processing: "處理中",
+    shipped: "已出貨",
+    cancelled: "取消"
+  }[normalizeOrderStatus(status)] || "新訂單";
+}
+
+function formatStatsDateKey(value) {
+  const date = new Date(value || 0);
+  if (Number.isNaN(date.getTime())) return "未填日期";
+  return date.toLocaleDateString("sv-SE", { timeZone: "Asia/Taipei" });
+}
+
+function addStatsBucket(map, key, value) {
+  const bucket = map.get(key) || {
+    key,
+    label: value.label || key,
+    count: 0,
+    revenue: 0,
+    quantity: 0
+  };
+  bucket.count += Number(value.count || 0);
+  bucket.revenue += Number(value.revenue || 0);
+  bucket.quantity += Number(value.quantity || 0);
+  map.set(key, bucket);
+}
+
+function buildStatsList(map, order = null) {
+  const list = [...map.values()];
+  if (Array.isArray(order)) {
+    const orderIndex = new Map(order.map((key, index) => [key, index]));
+    return list.sort((a, b) => (orderIndex.get(a.key) ?? 999) - (orderIndex.get(b.key) ?? 999));
+  }
+  return list.sort((a, b) => b.revenue - a.revenue || b.count - a.count || String(a.label).localeCompare(String(b.label), "zh-Hant"));
+}
+
 app.get("/api/config", (_req, res) => {
   res.json({ liffId: process.env.LIFF_ID || "" });
 });
@@ -1192,11 +1723,150 @@ app.post("/api/logistics/ecpay-store-callback", (req, res) => {
 
 app.get("/api/markets", async (_req, res) => {
   const catalog = await readCatalog();
-  res.json({ markets: catalog.markets.filter((market) => market.isActive !== false) });
+  const activeMarkets = catalog.markets.filter((market) => market.isActive !== false);
+  res.json({
+    categories: catalog.categories.filter((category) => category.isActive !== false),
+    markets: activeMarkets.length ? activeMarkets : catalog.markets.slice(0, 1)
+  });
+});
+
+app.get("/api/store-layout", async (_req, res) => {
+  res.json(await readStoreLayout());
 });
 
 app.get("/api/admin/catalog", async (_req, res) => {
   res.json(await readCatalog());
+});
+
+app.get("/api/admin/store-layout", async (_req, res) => {
+  res.json(await readStoreLayout());
+});
+
+app.put("/api/admin/store-layout", async (req, res) => {
+  await writeStoreLayout(req.body || {});
+  res.json(await readStoreLayout());
+});
+
+app.post("/api/admin/categories", async (req, res) => {
+  const catalog = await readCatalog();
+  const name = String(req.body.name || "").trim();
+  const parentId = String(req.body.parentId || "").trim();
+  if (!name) return res.status(400).json({ message: "請填寫分類名稱" });
+  if (parentId && !catalog.categories.some((entry) => entry.id === parentId)) {
+    return res.status(400).json({ message: "找不到上層分類" });
+  }
+
+  const category = {
+    id: makeId("category"),
+    name,
+    imageUrl: String(req.body.imageUrl || "").trim(),
+    isActive: req.body.isActive !== false,
+    parentId,
+    sortOrder: Number.isFinite(Number(req.body.sortOrder)) ? Number(req.body.sortOrder) : catalog.categories.length
+  };
+  catalog.categories.push(category);
+  await writeCatalog(catalog);
+  res.status(201).json({ category });
+});
+
+app.put("/api/admin/categories/reorder", async (req, res) => {
+  const catalog = await readCatalog();
+  const updates = Array.isArray(req.body?.categories) ? req.body.categories : [];
+  const categoryIds = new Set(catalog.categories.map((category) => category.id));
+  if (updates.length !== catalog.categories.length) {
+    return res.status(400).json({ message: "分類排序資料不完整" });
+  }
+
+  const seenIds = new Set();
+  const updateMap = new Map();
+  for (const update of updates) {
+    const id = String(update.id || "").trim();
+    const parentId = String(update.parentId || "").trim();
+    const sortOrder = Number(update.sortOrder);
+    if (!categoryIds.has(id)) return res.status(400).json({ message: "分類不存在" });
+    if (seenIds.has(id)) return res.status(400).json({ message: "分類排序資料重複" });
+    if (parentId && !categoryIds.has(parentId)) return res.status(400).json({ message: "上層分類不存在" });
+    if (parentId === id) return res.status(400).json({ message: "分類不能放到自己底下" });
+    seenIds.add(id);
+    updateMap.set(id, {
+      parentId,
+      sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0
+    });
+  }
+
+  for (const category of catalog.categories) {
+    let ancestorId = updateMap.get(category.id)?.parentId || "";
+    const visited = new Set([category.id]);
+    while (ancestorId) {
+      if (visited.has(ancestorId)) {
+        return res.status(400).json({ message: "分類不能放到自己的子分類底下" });
+      }
+      visited.add(ancestorId);
+      ancestorId = updateMap.get(ancestorId)?.parentId || "";
+    }
+  }
+
+  for (const category of catalog.categories) {
+    const update = updateMap.get(category.id);
+    category.parentId = update.parentId;
+    category.sortOrder = update.sortOrder;
+  }
+
+  await writeCatalog(catalog);
+  res.json({ categories: catalog.categories });
+});
+
+app.put("/api/admin/categories/:categoryId", async (req, res) => {
+  const catalog = await readCatalog();
+  const category = catalog.categories.find((entry) => entry.id === req.params.categoryId);
+  if (!category) return res.status(404).json({ message: "找不到分類" });
+
+  const name = String(req.body.name || "").trim();
+  const parentId = String(req.body.parentId || "").trim();
+  if (!name) return res.status(400).json({ message: "請填寫分類名稱" });
+  if (parentId === category.id) return res.status(400).json({ message: "上層分類不能選自己" });
+  if (parentId && !catalog.categories.some((entry) => entry.id === parentId)) {
+    return res.status(400).json({ message: "找不到上層分類" });
+  }
+  let ancestorId = parentId;
+  while (ancestorId) {
+    if (ancestorId === category.id) return res.status(400).json({ message: "上層分類不能選自己的子分類" });
+    ancestorId = catalog.categories.find((entry) => entry.id === ancestorId)?.parentId || "";
+  }
+
+  category.name = name;
+  category.imageUrl = String(req.body.imageUrl || "").trim();
+  category.isActive = req.body.isActive !== false;
+  category.parentId = parentId;
+  category.sortOrder = Number.isFinite(Number(req.body.sortOrder)) ? Number(req.body.sortOrder) : category.sortOrder;
+  await writeCatalog(catalog);
+  res.json({ category });
+});
+
+app.delete("/api/admin/categories/:categoryId", async (req, res) => {
+  const catalog = await readCatalog();
+  if (catalog.categories.length <= 1) return res.status(400).json({ message: "至少要保留一個分類" });
+  const exists = catalog.categories.some((entry) => entry.id === req.params.categoryId);
+  if (!exists) return res.status(404).json({ message: "找不到分類" });
+
+  catalog.categories = catalog.categories.filter((entry) => entry.id !== req.params.categoryId);
+  const fallbackCategoryId = catalog.categories[0]?.id || "default-category";
+  for (const category of catalog.categories) {
+    if (category.parentId === req.params.categoryId) category.parentId = "";
+  }
+  for (const market of catalog.markets) {
+    for (const product of market.products || []) {
+      if (product.categoryId === req.params.categoryId) product.categoryId = fallbackCategoryId;
+    }
+  }
+  await writeCatalog(catalog);
+  res.sendStatus(204);
+});
+
+app.get("/api/admin/stats", async (req, res) => {
+  const orders = await readOrders();
+  const catalog = await readCatalog();
+  res.json(buildAdminStats(orders, catalog, req.query || {}));
 });
 
 app.post("/api/admin/markets", async (req, res) => {
@@ -1204,18 +1874,13 @@ app.post("/api/admin/markets", async (req, res) => {
   const name = String(req.body.name || "").trim();
   if (!name) return res.status(400).json({ message: "請填寫賣場名稱" });
 
-  const market = {
-    id: makeId("market"),
-    name,
-    imageUrl: String(req.body.imageUrl || "").trim(),
-    description: String(req.body.description || "").trim(),
-    isActive: req.body.isActive !== false,
-    products: []
-  };
-
-  catalog.markets.push(market);
+  const market = catalog.markets[0];
+  market.name = name;
+  market.imageUrl = String(req.body.imageUrl || "").trim();
+  market.description = String(req.body.description || "").trim();
+  market.isActive = req.body.isActive !== false;
   await writeCatalog(catalog);
-  res.status(201).json({ market });
+  res.json({ market });
 });
 
 app.put("/api/admin/markets/:marketId", async (req, res) => {
@@ -1235,10 +1900,7 @@ app.put("/api/admin/markets/:marketId", async (req, res) => {
 });
 
 app.delete("/api/admin/markets/:marketId", async (req, res) => {
-  const catalog = await readCatalog();
-  catalog.markets = catalog.markets.filter((entry) => entry.id !== req.params.marketId);
-  await writeCatalog(catalog);
-  res.sendStatus(204);
+  res.status(400).json({ message: "系統只保留一個賣場，不能刪除" });
 });
 
 app.post("/api/admin/markets/:marketId/products", async (req, res) => {
@@ -1254,6 +1916,33 @@ app.post("/api/admin/markets/:marketId/products", async (req, res) => {
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
+});
+
+app.put("/api/admin/products/bulk-category", async (req, res) => {
+  const catalog = await readCatalog();
+  const productIds = Array.isArray(req.body.productIds)
+    ? req.body.productIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const categoryId = String(req.body.categoryId || "").trim();
+
+  if (productIds.length === 0) return res.status(400).json({ message: "請先勾選商品" });
+  if (!catalog.categories.some((category) => category.id === categoryId)) {
+    return res.status(400).json({ message: "找不到目標分類" });
+  }
+
+  const selectedIds = new Set(productIds);
+  const moved = [];
+  for (const market of catalog.markets) {
+    for (const product of market.products || []) {
+      if (!selectedIds.has(product.id)) continue;
+      product.categoryId = categoryId;
+      moved.push(product.id);
+    }
+  }
+
+  if (moved.length === 0) return res.status(404).json({ message: "找不到可移動的商品" });
+  await writeCatalog(catalog);
+  res.json({ movedCount: moved.length, categoryId });
 });
 
 app.put("/api/admin/products/:productId", async (req, res) => {
@@ -1366,6 +2055,15 @@ app.post("/api/admin/myship/create-orders", async (_req, res) => {
   } catch (error) {
     console.error("MyShip order sync failed:", error);
     res.status(500).json({ message: `賣貨便建單失敗：${getErrorMessage(error)}` });
+  }
+});
+
+app.post("/api/admin/myship/open-login-window", async (_req, res) => {
+  try {
+    res.json(await openMyshipLoginWindow());
+  } catch (error) {
+    console.error("MyShip login window failed:", error);
+    res.status(500).json({ message: `賣貨便登入視窗開啟失敗：${getErrorMessage(error)}` });
   }
 });
 
@@ -1557,6 +2255,17 @@ async function launchChromiumBrowser() {
   });
 }
 
+async function launchMyshipContext() {
+  const { chromium } = await import("playwright");
+  await ensureChromiumBrowserInstalled(chromium);
+  await fs.mkdir(myshipBrowserProfileDir, { recursive: true });
+  return chromium.launchPersistentContext(myshipBrowserProfileDir, {
+    headless: myshipHeadless,
+    locale: "zh-TW",
+    args: ["--no-sandbox", "--disable-dev-shm-usage"]
+  });
+}
+
 async function ensureChromiumBrowserInstalled(chromium) {
   const executablePath = chromium.executablePath();
   try {
@@ -1597,11 +2306,14 @@ async function ensureChromiumBrowserInstalled(chromium) {
 }
 
 async function withMyshipPage(task) {
-  const browser = await launchChromiumBrowser();
+  const context = await launchMyshipContext();
 
   try {
-    const context = await browser.newContext({ locale: "zh-TW" });
     const page = await context.newPage();
+    for (const existingPage of context.pages()) {
+      if (existingPage === page) continue;
+      await existingPage.close().catch(() => {});
+    }
     page.setDefaultTimeout(myshipDefaultTimeoutMs);
     page.setDefaultNavigationTimeout(myshipNavTimeoutMs);
     page.on("dialog", async (dialog) => {
@@ -1609,25 +2321,67 @@ async function withMyshipPage(task) {
     });
     return await task(page);
   } finally {
-    await browser.close();
+    await context.close();
+  }
+}
+
+async function openMyshipLoginWindow() {
+  if (myshipHeadless) {
+    throw new Error("MYSHIP_HEADLESS 目前是 true，無法開啟可手動登入的賣貨便視窗");
+  }
+
+  const context = await launchMyshipContext();
+  try {
+    const page = await context.newPage();
+    for (const existingPage of context.pages()) {
+      if (existingPage === page) continue;
+      await existingPage.close().catch(() => {});
+    }
+    page.setDefaultTimeout(myshipDefaultTimeoutMs);
+    page.setDefaultNavigationTimeout(myshipNavTimeoutMs);
+    page.on("dialog", async (dialog) => {
+      await dialog.accept().catch(() => {});
+    });
+
+    await page.goto(myshipProductUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1500);
+    if (await myshipNeedsLogin(page)) {
+      await myshipSubmitExternalLogin(page, "Facebook");
+    } else {
+      await myshipDismissDialogs(page);
+    }
+
+    await page.waitForTimeout(myshipManualLoginWindowMs);
+    const activePage = context.pages().find((entry) => entry.url().includes("myship.7-11.com.tw")) || page;
+    const url = activePage.url();
+    const text = await myshipBodyText(activePage);
+    const needsLogin = await myshipNeedsLogin(activePage).catch(() => true);
+    const blocked = url.includes("facebook.com") || /系統忙碌中|Code[:：]\s*(109|E0001)/i.test(text);
+
+    return {
+      ok: !needsLogin && !blocked,
+      url,
+      message: !needsLogin && !blocked
+        ? "賣貨便登入狀態已保存"
+        : "登入狀態尚未確認，請確認視窗內是否已完成 Facebook/賣貨便登入"
+    };
+  } finally {
+    await context.close();
   }
 }
 
 async function myshipLoginWithFacebook(page, credentials) {
   await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
-  await myshipDismissDialogs(page);
 
-  if (!await myshipIsFacebookLoginVisible(page)) return;
+  if (!await myshipNeedsLogin(page)) {
+    await myshipDismissDialogs(page);
+    return;
+  }
 
   const context = page.context();
   const popupPromise = context.waitForEvent("page", { timeout: 10000 }).catch(() => null);
-  await myshipClickFirst(page, [
-    "button.btn-soclial-login-facebook",
-    "form[action*='ExternalLogin'] button[name='provider']",
-    "button:has-text('Facebook 登入')",
-    "button:has-text('Facebook')"
-  ], "Facebook 登入");
+  await myshipSubmitExternalLogin(page, "Facebook");
 
   await Promise.race([
     page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }).catch(() => null),
@@ -1657,15 +2411,8 @@ async function myshipLoginWithFacebook(page, credentials) {
   await passInput.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   if (await passInput.count()) {
     await passInput.fill(credentials.password);
+    await passInput.press("Enter").catch(() => {});
   }
-
-  await myshipClickFirst(facebookPage, [
-    "div[role='button']:has-text('登入')",
-    "button[name='login']",
-    "input[name='login']",
-    "button[type='submit']",
-    "input[type='submit']"
-  ], "Facebook 登入送出");
 
   await Promise.race([
     facebookPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
@@ -1702,10 +2449,10 @@ async function myshipLoginWithFacebook(page, credentials) {
 
   await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
-  await myshipDismissDialogs(page);
-  if (await myshipIsFacebookLoginVisible(page)) {
-    throw new Error("Facebook 登入沒有完成，賣貨便仍停在登入視窗，可能需要手機驗證、雙重驗證或安全檢查");
+  if (await myshipNeedsLogin(page)) {
+    throw new Error("Facebook 登入沒有完成，賣貨便仍要求登入，可能需要手機驗證、雙重驗證或安全檢查");
   }
+  await myshipDismissDialogs(page);
 }
 
 async function createMyshipOrder(page, order, credentials) {
@@ -1713,6 +2460,7 @@ async function createMyshipOrder(page, order, credentials) {
   await page.goto(credentials.productUrl, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1500);
   await myshipDismissDialogs(page);
+  await myshipAssertReadyForProductAction(page);
   if (await myshipIsFacebookLoginVisible(page)) {
     throw new Error("賣貨便尚未登入，無法建立購物車，請確認 Facebook 帳密或安全驗證");
   }
@@ -1928,17 +2676,24 @@ async function myshipSetInputValue(page, locator, value) {
 }
 
 async function myshipDismissDialogs(page) {
-  for (const selector of [
-    "#alertify-ok",
-    ".alertify-button-ok",
-    "button.mfp-close",
-    "button:has-text('OK')",
-    "button:has-text('確定')"
-  ]) {
-    const locator = page.locator(selector).first();
-    if (await locator.count()) {
-      await locator.click({ timeout: 1500 }).catch(() => {});
+  for (let round = 0; round < 3; round += 1) {
+    let clicked = false;
+    for (const selector of [
+      "#alertify-ok",
+      ".alertify-button-ok",
+      "button.mfp-close",
+      "button:has-text('OK')",
+      "button:has-text('確定')"
+    ]) {
+      const locator = page.locator(selector).first();
+      if (await locator.count() && await locator.isVisible().catch(() => false)) {
+        await locator.click({ timeout: 1500, force: true }).catch(() => {});
+        clicked = true;
+        break;
+      }
     }
+    if (!clicked) break;
+    await page.waitForTimeout(250);
   }
 }
 
@@ -1948,6 +2703,33 @@ async function myshipIsFacebookLoginVisible(page) {
     .first()
     .isVisible({ timeout: 1000 })
     .catch(() => false);
+}
+
+async function myshipNeedsLogin(page) {
+  if (page.url().includes("facebook.com") || page.url().includes("access.line.me")) return true;
+  if (await myshipIsFacebookLoginVisible(page)) return true;
+  const loginAlert = await page
+    .locator("#alertify .alertify-message, .alertify-message")
+    .first()
+    .innerText({ timeout: 1000 })
+    .catch(() => "");
+  return /請登入|登入.*開始選購|uniopen/i.test(loginAlert);
+}
+
+async function myshipSubmitExternalLogin(page, provider) {
+  const submitted = await page.evaluate((targetProvider) => {
+    const forms = [...document.querySelectorAll("form")];
+    const form = forms.find((entry) => String(entry.action || "").includes("/SocialNetwork/ExternalLogin"));
+    if (!form) return false;
+    const button = form.querySelector(`button[name="provider"][value="${targetProvider}"]`);
+    if (!button) return false;
+    button.click();
+    return true;
+  }, provider);
+
+  if (!submitted) {
+    throw new Error(`找不到賣貨便 ${provider} 登入表單`);
+  }
 }
 
 async function myshipClickOptional(page, selectors, label) {
@@ -1993,6 +2775,17 @@ async function myshipClickFirst(page, selectors, label) {
 
 async function myshipBodyText(page) {
   return page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+}
+
+async function myshipAssertReadyForProductAction(page) {
+  const url = page.url();
+  const text = await myshipBodyText(page);
+  if (url.includes("facebook.com")) {
+    throw new Error("Facebook 登入沒有完成，賣貨便仍被導向 Facebook 登入頁，可能需要人工驗證或帳號被安全檢查");
+  }
+  if (/系統忙碌中|Code[:：]\s*109|E0001/i.test(text)) {
+    throw new Error(`賣貨便目前回傳系統忙碌或錯誤，請稍後再試｜${text.replace(/\s+/g, " ").slice(0, 180)}`);
+  }
 }
 
 async function myshipDetectFacebookChallenge(page) {
@@ -2483,31 +3276,58 @@ app.post("/api/admin/products/import", async (req, res) => {
   if (parsed.error) return res.status(400).json({ message: parsed.error });
 
   const catalog = await readCatalog();
-  let createdMarkets = 0;
+  const market = catalog.markets[0];
+  let createdCategories = 0;
   let createdProducts = 0;
   let createdVariants = 0;
   let updatedVariants = 0;
 
   for (const item of parsed.items) {
-    let market = catalog.markets.find((entry) => entry.name.trim() === item.marketName);
-    if (!market) {
-      market = {
-        id: makeId("market"),
-        name: item.marketName,
-        description: "",
-        isActive: item.isActive,
-        products: []
-      };
-      catalog.markets.push(market);
-      createdMarkets += 1;
+    let category = null;
+    if (item.categoryName) {
+      category = catalog.categories.find((entry) => entry.name.trim() === item.categoryName && !entry.parentId);
+      if (!category) {
+        category = {
+          id: makeId("category"),
+          name: item.categoryName,
+          imageUrl: "",
+          isActive: true,
+          parentId: "",
+          sortOrder: catalog.categories.length
+        };
+        catalog.categories.push(category);
+        createdCategories += 1;
+      }
     }
+    category ||= catalog.categories[0];
+    if (item.subCategoryName) {
+      let subCategory = catalog.categories.find((entry) => (
+        entry.name.trim() === item.subCategoryName
+        && entry.parentId === category.id
+      ));
+      if (!subCategory) {
+        subCategory = {
+          id: makeId("category"),
+          name: item.subCategoryName,
+          imageUrl: "",
+          isActive: true,
+          parentId: category.id,
+          sortOrder: catalog.categories.length
+        };
+        catalog.categories.push(subCategory);
+        createdCategories += 1;
+      }
+      category = subCategory;
+    }
+    const categoryId = category.id;
 
     market.isActive = item.isActive;
-    let product = market.products.find((entry) => entry.name.trim() === item.productName);
+    let product = market.products.find((entry) => entry.name.trim() === item.productName && entry.categoryId === categoryId);
     if (!product) {
       product = {
         id: makeId("product"),
         name: item.productName,
+        categoryId,
         imageUrl: item.productImageUrl,
         description: item.productDescription,
         variants: []
@@ -2515,6 +3335,7 @@ app.post("/api/admin/products/import", async (req, res) => {
       market.products.push(product);
       createdProducts += 1;
     } else {
+      product.categoryId = categoryId;
       product.description = item.productDescription || product.description || "";
       product.imageUrl = item.productImageUrl || product.imageUrl || "";
     }
@@ -2542,7 +3363,8 @@ app.post("/api/admin/products/import", async (req, res) => {
   await writeCatalog(catalog);
   res.json({
     importedRows: parsed.items.length,
-    createdMarkets,
+    createdMarkets: 0,
+    createdCategories,
     createdProducts,
     createdVariants,
     updatedVariants
@@ -3295,7 +4117,7 @@ async function exportMallbicInventoryWorkbook({ account, password }) {
 }
 
 function parseProductImportRows(rows) {
-  const requiredHeaders = ["賣場名稱", "商品名稱", "款式", "品項條碼", "售價", "數量"];
+  const requiredHeaders = ["商品名稱", "款式", "品項條碼", "售價", "數量"];
   const headerIndex = rows.findIndex((row) => {
     const cells = row.map((cell) => String(cell).trim());
     return requiredHeaders.every((header) => cells.includes(header));
@@ -3308,6 +4130,8 @@ function parseProductImportRows(rows) {
   const headers = rows[headerIndex].map((cell) => String(cell).trim());
   const indexOf = (name) => headers.indexOf(name);
   const marketIndex = indexOf("賣場名稱");
+  const categoryIndex = indexOf("分類");
+  const subCategoryIndex = indexOf("子分類");
   const productIndex = indexOf("商品名稱");
   const descriptionIndex = indexOf("商品說明");
   const productImageIndex = indexOf("商品圖片網址");
@@ -3320,22 +4144,26 @@ function parseProductImportRows(rows) {
 
   const items = [];
   for (const row of rows.slice(headerIndex + 1)) {
-    const marketName = String(row[marketIndex] || "").trim();
+    const marketName = marketIndex >= 0 ? String(row[marketIndex] || "").trim() : "";
+    const categoryName = categoryIndex >= 0 ? String(row[categoryIndex] || "").trim() : "";
+    const subCategoryName = subCategoryIndex >= 0 ? String(row[subCategoryIndex] || "").trim() : "";
     const productName = String(row[productIndex] || "").trim();
     const variantName = String(row[variantIndex] || "").trim();
     const barcode = String(row[barcodeIndex] || "").trim();
     const price = Number(row[priceIndex]);
     const stock = Number(row[stockIndex]);
 
-    if (!marketName && !productName && !variantName && !barcode) continue;
-    if (!marketName || !productName || !variantName || !barcode) {
-      return { error: `資料缺少必要欄位：${barcode || productName || marketName || "空白列"}` };
+    if (!categoryName && !marketName && !productName && !variantName && !barcode) continue;
+    if (!productName || !variantName || !barcode) {
+      return { error: `資料缺少必要欄位：${barcode || productName || categoryName || "空白列"}` };
     }
     if (!Number.isFinite(price) || price < 0) return { error: `${barcode} 售價格式錯誤` };
     if (!Number.isInteger(stock) || stock < 0) return { error: `${barcode} 數量格式錯誤` };
 
     items.push({
       marketName,
+      categoryName,
+      subCategoryName,
       productName,
       productDescription: descriptionIndex >= 0 ? String(row[descriptionIndex] || "").trim() : "",
       productImageUrl: productImageIndex >= 0 ? String(row[productImageIndex] || "").trim() : "",

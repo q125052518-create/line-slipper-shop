@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>數據統計</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Stats</p>
+        <h1>數據統計</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">商品管理</a>
+        <a class="admin-link is-current" href="/admin-stats.html">數據統計</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main stats-main">
+      <section class="editor-panel">
+        <div class="section-head">
+          <div>
+            <h2>統計篩選</h2>
+            <p class="muted">有效營收只計算未取消訂單，取消金額會另外列出。</p>
+          </div>
+          <button type="button" id="refreshStatsButton">重新整理</button>
+        </div>
+        <form id="statsFilters" class="stats-filter-form">
+          <label>
+            開始日期
+            <input type="date" name="from">
+          </label>
+          <label>
+            結束日期
+            <input type="date" name="to">
+          </label>
+          <label>
+            訂單狀態
+            <select name="status">
+              <option value="all">全部</option>
+              <option value="pending">新訂單</option>
+              <option value="processing">處理中</option>
+              <option value="shipped">已出貨</option>
+              <option value="cancelled">取消</option>
+            </select>
+          </label>
+          <button type="submit">套用</button>
+          <button type="button" class="secondary-button" id="clearStatsFiltersButton">清除</button>
+        </form>
+      </section>
+
+      <section id="statsStatus" class="stats-message"></section>
+      <section id="summaryCards" class="stats-card-grid"></section>
+
+      <section class="stats-two-column">
+        <div class="editor-panel">
+          <h2>訂單狀態</h2>
+          <div id="statusBreakdown" class="stats-list"></div>
+        </div>
+        <div class="editor-panel">
+          <h2>取貨方式</h2>
+          <div id="deliveryBreakdown" class="stats-list"></div>
+        </div>
+      </section>
+
+      <section class="editor-panel">
+        <h2>每日營收</h2>
+        <div id="dailySales" class="stats-list stats-daily-list"></div>
+      </section>
+
+      <section class="editor-panel">
+        <h2>熱銷品項</h2>
+        <div class="stats-table-wrap">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>圖片</th>
+                <th>商品</th>
+                <th>款式</th>
+                <th>品項條碼</th>
+                <th>銷售數量</th>
+                <th>營收</th>
+                <th>目前庫存</th>
+              </tr>
+            </thead>
+            <tbody id="topItems"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="editor-panel">
+        <h2>近期訂單</h2>
+        <div class="stats-table-wrap">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>訂單號</th>
+                <th>時間</th>
+                <th>姓名</th>
+                <th>狀態</th>
+                <th>取貨</th>
+                <th>數量</th>
+                <th>金額</th>
+                <th>墨筆克</th>
+                <th>賣貨便</th>
+              </tr>
+            </thead>
+            <tbody id="recentOrders"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-stats.js"></script>
+  </body>
+</html>

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>賣場布置</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Layout</p>
+        <h1>賣場布置</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">我的商品</a>
+        <a class="admin-link" href="/admin-categories.html">分類管理</a>
+        <a class="admin-link is-current" href="/admin-layout.html">賣場布置</a>
+        <a class="admin-link" href="/admin-stats.html">數據統計</a>
+        <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
+        <a class="admin-link" href="/admin-tools.html">匯入同步</a>
+        <a class="admin-link" href="/admin-orders.html">訂單後台</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <section class="layout-builder">
+        <aside class="editor-panel layout-component-panel">
+          <div class="section-head compact-head">
+            <div>
+              <h2>布置元件</h2>
+              <p class="muted">點一下就會加入手機首頁。</p>
+            </div>
+          </div>
+
+          <div class="layout-component-group">
+            <h3>看板 & 文字</h3>
+            <button type="button" class="layout-component-card" data-add-layout-block="banner">
+              <strong>輪播看板</strong>
+              <span>賣場封面、活動圖、主視覺。</span>
+            </button>
+            <button type="button" class="layout-component-card" data-add-layout-block="notice">
+              <strong>文字公告</strong>
+              <span>出貨時間、活動提醒、注意事項。</span>
+            </button>
+          </div>
+
+          <div class="layout-component-group">
+            <h3>商品 & 分類</h3>
+            <button type="button" class="layout-component-card" data-add-layout-block="category-grid">
+              <strong>分類區</strong>
+              <span>大分類、子分類入口。</span>
+            </button>
+            <button type="button" class="layout-component-card" data-add-layout-block="featured-products">
+              <strong>主打商品</strong>
+              <span>手動挑商品放首頁。</span>
+            </button>
+            <button type="button" class="layout-component-card" data-add-layout-block="new-products">
+              <strong>新上架</strong>
+              <span>照商品順序顯示最新商品。</span>
+            </button>
+            <button type="button" class="layout-component-card" data-add-layout-block="hot-products">
+              <strong>熱銷商品</strong>
+              <span>優先顯示庫存較多的商品。</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="editor-panel layout-preview-panel">
+          <div class="section-head">
+            <div>
+              <h2>版型預覽</h2>
+              <p class="muted">可切換手機版與電腦版，前台會照這裡的元件顯示。</p>
+            </div>
+            <button type="button" id="refreshLayoutButton">重新整理</button>
+          </div>
+
+          <div class="layout-preview-actions">
+            <div class="layout-device-toggle" aria-label="預覽版型">
+              <button type="button" class="is-current" data-preview-device="phone">手機版</button>
+              <button type="button" data-preview-device="desktop">電腦版</button>
+            </div>
+          </div>
+
+          <div class="layout-preview-pane" data-preview-pane="phone">
+          <div class="phone-preview">
+            <div class="phone-status-bar">
+              <span>12:30</span>
+              <span>● ● ●</span>
+            </div>
+            <div class="phone-shop-cover">
+              <div id="phoneShopAvatar" class="phone-shop-avatar"></div>
+              <div>
+                <strong id="phoneShopName">拖鞋賣場</strong>
+                <small>線上賣場</small>
+              </div>
+            </div>
+            <nav class="phone-shop-tabs">
+              <button type="button" class="is-current" data-phone-preview-tab="store">賣場</button>
+              <button type="button" data-phone-preview-tab="products">商品</button>
+              <button type="button" data-phone-preview-tab="categories">分類</button>
+            </nav>
+            <div id="layoutPhonePreview" class="phone-layout-blocks"></div>
+          </div>
+          </div>
+
+          <div class="layout-preview-pane hidden" data-preview-pane="desktop">
+            <div class="desktop-preview">
+              <header class="desktop-preview-header">
+                <div>
+                  <p class="eyebrow">LINE SLIPPER SHOP</p>
+                  <h3 id="desktopShopHeaderName">拖鞋賣場</h3>
+                </div>
+                <div class="desktop-preview-actions">
+                  <span>購物車 <b>0</b></span>
+                  <span>我的訂單</span>
+                </div>
+              </header>
+
+              <main class="desktop-preview-main">
+                <section class="desktop-shop-cover">
+                  <img id="desktopShopAvatar" src="https://placehold.co/160x160/f2efe8/1e2720?text=Shop" alt="">
+                  <div>
+                    <p>線上賣場</p>
+                    <strong id="desktopShopName">拖鞋賣場</strong>
+                    <span id="desktopShopDescription">精選商品，線上下單。</span>
+                  </div>
+                </section>
+
+                <nav class="desktop-shop-tabs">
+                  <button type="button" class="is-current" data-phone-preview-tab="store">賣場</button>
+                  <button type="button" data-phone-preview-tab="products">商品</button>
+                </nav>
+
+                <div id="layoutDesktopPreview" class="desktop-layout-blocks"></div>
+              </main>
+            </div>
+          </div>
+
+          <div class="layout-block-list-wrap">
+            <div class="section-head compact-head">
+              <div>
+                <h3>目前首頁元件</h3>
+                <p class="muted">可選取設定，也可上下排序。</p>
+              </div>
+            </div>
+            <div id="layoutBlockList" class="layout-block-list"></div>
+          </div>
+        </section>
+
+        <aside class="editor-panel layout-settings-panel">
+          <div class="section-head compact-head">
+            <div>
+              <h2 id="layoutSettingsTitle">元件設定</h2>
+              <p class="muted">設定目前選到的首頁元件。</p>
+            </div>
+            <button type="button" id="saveLayoutButton">儲存</button>
+          </div>
+
+          <form id="layoutSettingsForm" class="layout-settings-form">
+            <div id="layoutBlockSettings" class="layout-block-settings"></div>
+          </form>
+
+          <p id="layoutMessage" class="message"></p>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-layout.js"></script>
+  </body>
+</html>

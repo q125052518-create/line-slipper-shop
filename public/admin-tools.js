@@ -10,6 +10,7 @@ const mallbicOrderStatusButtonEl = document.querySelector("#mallbicOrderStatusBu
 const mallbicOrderStatusMessageEl = document.querySelector("#mallbicOrderStatusMessage");
 const productImportFormEl = document.querySelector("#productImportForm");
 const productImportMessageEl = document.querySelector("#productImportMessage");
+const myshipLoginWindowButtonEl = document.querySelector("#myshipLoginWindowButton");
 const myshipOrderSyncButtonEl = document.querySelector("#myshipOrderSyncButton");
 const myshipOrderSyncStatusEl = document.querySelector("#myshipOrderSyncStatus");
 const myshipOrderSyncMessageEl = document.querySelector("#myshipOrderSyncMessage");
@@ -155,7 +156,7 @@ productImportFormEl.addEventListener("submit", async (event) => {
   }
 
   productImportMessageEl.textContent =
-    `匯入 ${data.importedRows} 列，新增賣場 ${data.createdMarkets} 個，新增商品 ${data.createdProducts} 個，新增品項 ${data.createdVariants} 個，更新品項 ${data.updatedVariants} 個`;
+    `匯入 ${data.importedRows} 列，新增分類 ${data.createdCategories || 0} 個，新增商品 ${data.createdProducts} 個，新增品項 ${data.createdVariants} 個，更新品項 ${data.updatedVariants} 個`;
   productImportFormEl.reset();
 });
 
@@ -267,6 +268,32 @@ myshipOrderSyncButtonEl?.addEventListener("click", async () => {
     myshipOrderSyncMessageEl.textContent = "賣貨便建單失敗，請稍後再試";
   } finally {
     myshipOrderSyncButtonEl.disabled = false;
+    await loadMyshipOrderSyncStatus();
+  }
+});
+
+myshipLoginWindowButtonEl?.addEventListener("click", async () => {
+  const confirmed = confirm("要開啟賣貨便登入視窗嗎？開啟後請在跳出的 Chromium 視窗完成 Facebook/賣貨便登入。");
+  if (!confirmed) return;
+
+  myshipLoginWindowButtonEl.disabled = true;
+  myshipOrderSyncMessageEl.textContent = "正在開啟賣貨便登入視窗，請在跳出的視窗完成登入...";
+
+  try {
+    const response = await fetch("/api/admin/myship/open-login-window", { method: "POST" });
+    const data = await response.json();
+
+    if (!response.ok) {
+      myshipOrderSyncMessageEl.textContent = data.message || "賣貨便登入視窗開啟失敗";
+      return;
+    }
+
+    myshipOrderSyncMessageEl.textContent = data.message || "賣貨便登入視窗已關閉";
+    await loadMyshipOrderSyncStatus();
+  } catch {
+    myshipOrderSyncMessageEl.textContent = "賣貨便登入視窗開啟失敗，請稍後再試";
+  } finally {
+    myshipLoginWindowButtonEl.disabled = false;
     await loadMyshipOrderSyncStatus();
   }
 });

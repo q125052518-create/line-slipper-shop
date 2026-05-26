@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>賣場設定</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Admin Market</p>
+        <h1>賣場設定</h1>
+      </div>
+      <nav class="header-actions">
+        <a class="admin-link" href="/admin.html">我的商品</a>
+        <a class="admin-link is-current" href="/admin-market.html">賣場設定</a>
+        <a class="admin-link" href="/admin-categories.html">分類管理</a>
+        <a class="admin-link" href="/admin-layout.html">賣場布置</a>
+        <a class="admin-link" href="/admin-stats.html">數據統計</a>
+        <a class="admin-link" href="/">下單頁</a>
+        <button type="button" id="logoutButton">登出</button>
+      </nav>
+    </header>
+
+    <main class="admin-main">
+      <form id="marketForm" class="editor-panel market-settings-panel">
+        <h2>賣場設定</h2>
+        <label>
+          賣場名稱
+          <input name="name" required>
+        </label>
+        <label>
+          賣場說明
+          <textarea name="description" rows="3"></textarea>
+        </label>
+        <label>
+          賣場頭像
+          <small class="field-hint">顯示在前台賣場左上角的圓形頭像。</small>
+          <span class="image-uploader market-avatar-uploader">
+            <span class="image-preview empty" data-image-preview>尚未上傳</span>
+            <input type="file" name="imageFile" accept="image/*">
+            <input type="hidden" name="imageUrl">
+            <button type="button" data-clear-image>刪除圖片</button>
+          </span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" name="isActive" checked>
+          前台顯示
+        </label>
+        <button type="submit">儲存賣場設定</button>
+        <p id="marketMessage" class="message"></p>
+      </form>
+    </main>
+
+    <script src="/admin-common.js"></script>
+    <script src="/admin-market.js"></script>
+  </body>
+</html>

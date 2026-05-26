@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "blocks": [
+    {
+      "id": "banner-default",
+      "type": "banner",
+      "title": "賣場看板",
+      "enabled": true,
+      "imageUrls": [],
+      "linkUrl": "",
+      "sortOrder": 0
+    },
+    {
+      "id": "notice-default",
+      "type": "notice",
+      "title": "賣場公告",
+      "enabled": true,
+      "text": "新品陸續上架中，下單前可先聊聊確認現貨。",
+      "sortOrder": 1
+    },
+    {
+      "id": "category-grid-default",
+      "type": "category-grid",
+      "title": "分類區",
+      "enabled": true,
+      "categoryIds": [],
+      "columns": 5,
+      "sortOrder": 2
+    },
+    {
+      "id": "featured-products-default",
+      "type": "featured-products",
+      "title": "主打商品",
+      "enabled": true,
+      "productIds": [],
+      "limit": 6,
+      "sortOrder": 3
+    },
+    {
+      "id": "new-products-default",
+      "type": "new-products",
+      "title": "新上架",
+      "enabled": true,
+      "limit": 6,
+      "sortOrder": 4
+    },
+    {
+      "id": "hot-products-default",
+      "type": "hot-products",
+      "title": "熱銷商品",
+      "enabled": true,
+      "limit": 6,
+      "sortOrder": 5
+    }
+  ]
+}

@@ -14,6 +14,7 @@
       </div>
       <nav class="header-actions">
         <a class="admin-link" href="/admin.html">商品管理</a>
+        <a class="admin-link" href="/admin-stats.html">數據統計</a>
         <a class="admin-link" href="/admin-chat.html">買家聊聊</a>
         <a class="admin-link is-current" href="/admin-tools.html">匯入同步</a>
         <a class="admin-link" href="/admin-orders.html">訂單後台</a>
@@ -38,7 +39,7 @@
 
         <section class="editor-panel">
           <h2>Excel 大量上架</h2>
-          <p class="muted">欄位：賣場名稱、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。</p>
+          <p class="muted">欄位：分類、子分類、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。賣場固定只有一個，不用再填賣場名稱。</p>
           <a class="cart-link" href="/product-import-template.xlsx" download>下載上架範本</a>
           <form id="productImportForm" class="order-form">
             <label>
@@ -75,6 +76,7 @@
         <section class="editor-panel">
           <h2>賣貨便建單</h2>
           <p class="muted">7-11 訂單會用賣貨便「金額」規格建單，數量等於訂單金額。Facebook 如果跳安全驗證，後台會顯示錯誤。</p>
+          <button type="button" id="myshipLoginWindowButton">開啟賣貨便登入視窗</button>
           <button type="button" id="myshipOrderSyncButton">建立待處理賣貨便訂單</button>
           <p id="myshipOrderSyncStatus" class="muted"></p>
           <p id="myshipOrderSyncMessage" class="message"></p>
