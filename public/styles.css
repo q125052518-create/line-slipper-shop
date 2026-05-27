@@ -1058,8 +1058,15 @@ h1 {
 }
 
 .shop-product-card .shop-variant-strip,
-.shop-product-card .shop-product-meta,
 .shop-product-card .shop-product-actions {
+  display: none;
+}
+
+.shop-product-card .shop-product-meta {
+  margin-top: 2px;
+}
+
+.shop-product-card .shop-product-meta span {
   display: none;
 }
 
@@ -1107,16 +1114,20 @@ h1 {
 }
 
 .product-detail-grid {
+  align-items: start;
   display: grid;
   gap: 22px;
   grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1fr);
 }
 
 .product-detail-media {
+  align-self: start;
   background: #fff0f5;
   border: 1px solid #f0d9e1;
   border-radius: 6px;
   overflow: hidden;
+  position: sticky;
+  top: 0;
 }
 
 .product-detail-image {
@@ -3700,6 +3711,10 @@ button.admin-chat-list-item.is-selected {
 
   .product-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .product-detail-media {
+    position: static;
   }
 
   .product-detail-body {
