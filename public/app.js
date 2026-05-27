@@ -785,7 +785,23 @@ document.addEventListener("click", (event) => {
       state.selectedVariants[productId] = variantButton.dataset.variantId;
     }
     if (state.openProductId) {
+      const detailDialog = document.querySelector(".product-detail-dialog");
+      const detailScrollTop = detailDialog?.scrollTop || 0;
+      const variantId = variantButton.dataset.variantId;
+      const variantTop = variantButton.getBoundingClientRect().top;
       renderProductDetail(state.openProductId);
+      const restoreDetailScroll = () => {
+        const nextDetailDialog = document.querySelector(".product-detail-dialog");
+        if (!nextDetailDialog) return;
+        nextDetailDialog.scrollTop = detailScrollTop;
+        const nextVariantButton = Array.from(nextDetailDialog.querySelectorAll("[data-select-variant]"))
+          .find((button) => button.dataset.selectVariant === productId && button.dataset.variantId === variantId);
+        if (nextVariantButton) {
+          nextDetailDialog.scrollTop += nextVariantButton.getBoundingClientRect().top - variantTop;
+        }
+      };
+      restoreDetailScroll();
+      requestAnimationFrame(restoreDetailScroll);
     } else {
       renderProducts();
     }
