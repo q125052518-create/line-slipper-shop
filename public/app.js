@@ -8,6 +8,7 @@ const state = {
   currentStoreTab: "store",
   currentCategoryId: "all",
   selectedVariants: {},
+  openProductId: "",
   cart: readCart(),
   buyer: null
 };
@@ -182,6 +183,10 @@ function categoryName(categoryId) {
 
 function marketProducts() {
   return currentMarket()?.products || [];
+}
+
+function productById(productId) {
+  return marketProducts().find((entry) => entry.id === productId);
 }
 
 function categoryProducts(categoryId) {
@@ -521,7 +526,7 @@ function renderProducts() {
     const loginRequired = !state.buyer;
 
     return `
-      <article class="shop-product-card">
+      <article class="shop-product-card" role="button" tabindex="0" data-open-product="${escapeHtml(product.id)}">
         <div class="shop-product-image-wrap">
           <img class="product-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}" data-product-image="${escapeHtml(product.id)}">
           ${disabled ? '<span class="soldout-badge">售完</span>' : ""}
@@ -564,6 +569,89 @@ function renderProducts() {
 
 function cartKey(marketId, productId, variantId) {
   return `${marketId}|${productId}|${variantId}`;
+}
+
+function ensureProductDetailOverlay() {
+  let overlay = document.querySelector("#productDetailOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "productDetailOverlay";
+    overlay.className = "product-detail-overlay";
+    document.body.appendChild(overlay);
+  }
+  return overlay;
+}
+
+function closeProductDetail() {
+  state.openProductId = "";
+  document.querySelector("#productDetailOverlay")?.remove();
+}
+
+function openProductDetail(productId) {
+  state.openProductId = productId;
+  renderProductDetail(productId);
+}
+
+function renderProductDetail(productId = state.openProductId) {
+  const product = productById(productId);
+  if (!product) {
+    closeProductDetail();
+    return;
+  }
+
+  const selected = selectedVariant(product);
+  const variants = product.variants || [];
+  const imageUrl = selected?.imageUrl || productListImage(product);
+  const stock = Number(selected?.stock || 0);
+  const disabled = !selected || stock <= 0;
+  const loginRequired = !state.buyer;
+  const overlay = ensureProductDetailOverlay();
+
+  overlay.innerHTML = `
+    <div class="product-detail-backdrop" data-close-product-detail></div>
+    <section class="product-detail-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(product.name)}">
+      <button type="button" class="product-detail-close" aria-label="關閉" data-close-product-detail>×</button>
+      <div class="product-detail-grid">
+        <div class="product-detail-media">
+          <img class="product-detail-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+        </div>
+        <div class="product-detail-body">
+          <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
+          <h2>${escapeHtml(product.name)}</h2>
+          <p>${escapeHtml(product.description || "精選商品")}</p>
+          <div class="product-detail-variant-list" role="list" aria-label="${escapeHtml(product.name)}品項">
+            ${variants.length ? variants.map((variant) => {
+              const isSelected = selected?.id === variant.id;
+              const variantImage = variant.imageUrl || product.imageUrl || placeholderImage(variant.name);
+              return `
+                <button
+                  type="button"
+                  class="shop-variant-chip product-detail-variant ${isSelected ? "is-selected" : ""}"
+                  data-select-variant="${escapeHtml(product.id)}"
+                  data-variant-id="${escapeHtml(variant.id)}"
+                  title="${escapeHtml(`${variant.name} ${variant.barcode}`)}"
+                >
+                  <img src="${escapeHtml(variantImage)}" alt="">
+                  <span>
+                    <strong>${escapeHtml(variant.name)}</strong>
+                    <small>${escapeHtml(variant.barcode || "")}</small>
+                  </span>
+                </button>
+              `;
+            }).join("") : '<p class="empty">尚未建立品項</p>'}
+          </div>
+          <div class="product-detail-meta">
+            <strong>${selected ? formatMoney(selected.price) : productPriceText(product)}</strong>
+            <span>庫存 ${stock}</span>
+          </div>
+          <div class="product-detail-actions">
+            <input type="number" min="1" max="${stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled || loginRequired ? "disabled" : ""}>
+            <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : loginRequired ? "登入購買" : "加入購物車"}</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function addToCart(productId) {
@@ -615,6 +703,7 @@ document.addEventListener("click", (event) => {
   if (tabButton) {
     state.currentStoreTab = tabButton.dataset.storeTab || "store";
     normalizeStoreTabForViewport();
+    closeProductDetail();
     if (state.currentStoreTab === "products") {
       state.currentCategoryId = "all";
       state.selectedVariants = {};
@@ -628,20 +717,50 @@ document.addEventListener("click", (event) => {
     state.currentCategoryId = categoryButton.dataset.openCategory;
     state.currentStoreTab = "products";
     state.selectedVariants = {};
+    closeProductDetail();
     renderCatalog();
     document.querySelector(".store-product-area")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const closeDetailButton = event.target.closest("[data-close-product-detail]");
+  if (closeDetailButton) {
+    closeProductDetail();
     return;
   }
 
   const variantButton = event.target.closest("[data-select-variant]");
   if (variantButton) {
     state.selectedVariants[variantButton.dataset.selectVariant] = variantButton.dataset.variantId;
-    renderProducts();
+    if (state.openProductId) {
+      renderProductDetail(state.openProductId);
+    } else {
+      renderProducts();
+    }
+    return;
+  }
+
+  const productCard = event.target.closest("[data-open-product]");
+  if (productCard) {
+    openProductDetail(productCard.dataset.openProduct);
     return;
   }
 
   const productId = event.target.dataset.addProduct;
   if (productId) addToCart(productId);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.openProductId) {
+    closeProductDetail();
+    return;
+  }
+
+  const productCard = event.target.closest?.("[data-open-product]");
+  if (productCard && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    openProductDetail(productCard.dataset.openProduct);
+  }
 });
 
 productSearchEl.addEventListener("input", renderProducts);
