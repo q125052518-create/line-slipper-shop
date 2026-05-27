@@ -19,6 +19,7 @@ let editingProductId = "";
 let productViewMode = "list";
 let draggedVariantRow = null;
 let isPointerDraggingVariant = false;
+let productNoticeTimer = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -44,6 +45,23 @@ async function requestJson(url, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || "操作失敗");
   return data;
+}
+
+function showProductNotice(message) {
+  let notice = document.querySelector("[data-product-notice]");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "admin-toast";
+    notice.dataset.productNotice = "true";
+    document.body.appendChild(notice);
+  }
+
+  notice.textContent = message;
+  notice.classList.add("is-visible");
+  clearTimeout(productNoticeTimer);
+  productNoticeTimer = setTimeout(() => {
+    notice.classList.remove("is-visible");
+  }, 2200);
 }
 
 function currentMarket() {
@@ -640,6 +658,7 @@ productFormEl.addEventListener("submit", async (event) => {
     newVariantsEl.innerHTML = variantRow();
     await loadCatalog();
     showProductList();
+    showProductNotice("已成功");
   } catch (error) {
     alert(error.message);
   }
@@ -770,7 +789,10 @@ document.addEventListener("submit", async (event) => {
           variants: await collectVariantsWithImages(event.target.querySelector(".variant-editor"))
         })
       });
+      editingProductId = "";
       await loadCatalog();
+      showProductList();
+      showProductNotice("已成功");
     } catch (error) {
       alert(error.message);
     }

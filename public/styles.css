@@ -1609,6 +1609,28 @@ select {
   display: none !important;
 }
 
+.admin-toast {
+  background: #157962;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(20, 40, 32, 0.18);
+  color: #fff;
+  font-weight: 800;
+  opacity: 0;
+  padding: 12px 18px;
+  pointer-events: none;
+  position: fixed;
+  right: 24px;
+  top: 24px;
+  transform: translateY(-8px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 1000;
+}
+
+.admin-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .store-picker {
   border: 1px solid #ded8cd;
   border-radius: 8px;
