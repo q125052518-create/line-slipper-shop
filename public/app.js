@@ -95,19 +95,10 @@ function showCartPopup(message = "已加入購物車") {
     popup.className = "cart-popup";
     popup.dataset.cartPopup = "true";
     popup.innerHTML = `
-      <div class="cart-popup-panel" role="dialog" aria-modal="true" aria-live="polite">
+      <div class="cart-popup-panel" role="status" aria-live="polite">
         <strong data-cart-popup-message></strong>
-        <div class="cart-popup-actions">
-          <a href="/cart.html">查看購物車</a>
-          <button type="button" data-close-cart-popup>繼續逛逛</button>
-        </div>
       </div>
     `;
-    popup.addEventListener("click", (event) => {
-      if (event.target === popup || event.target.closest("[data-close-cart-popup]")) {
-        closeCartPopup();
-      }
-    });
     document.body.appendChild(popup);
   }
 
@@ -751,7 +742,7 @@ function addToCart(productId) {
 
   saveCart();
   messageEl.textContent = `${product.name} - ${variant.name} x ${addQuantity} 已加入購物車`;
-  showCartPopup("已加入購物車");
+  showCartPopup(`${variant.name || product.name}*${addQuantity}已加入購物車`);
 }
 
 document.addEventListener("click", (event) => {
