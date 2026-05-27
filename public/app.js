@@ -219,6 +219,12 @@ function selectedVariant(product) {
   return variants.find((variant) => variant.id === selectedId) || variants[0];
 }
 
+function explicitSelectedVariant(product) {
+  const selectedId = state.selectedVariants[product.id];
+  if (!selectedId) return null;
+  return (product.variants || []).find((variant) => variant.id === selectedId) || null;
+}
+
 function productMinPrice(product) {
   const prices = (product.variants || []).map((variant) => Number(variant.price || 0));
   return prices.length ? Math.min(...prices) : 0;
@@ -599,12 +605,14 @@ function renderProductDetail(productId = state.openProductId) {
     return;
   }
 
-  const selected = selectedVariant(product);
+  const selected = explicitSelectedVariant(product);
   const variants = product.variants || [];
   const imageUrl = selected?.imageUrl || productListImage(product);
-  const stock = Number(selected?.stock || 0);
-  const disabled = !selected || stock <= 0;
+  const stock = selected ? Number(selected.stock || 0) : productTotalStock(product);
+  const needsVariant = variants.length > 0 && !selected;
+  const disabled = needsVariant || !selected || stock <= 0;
   const loginRequired = !state.buyer;
+  const actionText = needsVariant ? "請選擇品項" : disabled ? "售完" : loginRequired ? "登入購買" : "加入購物車";
   const overlay = ensureProductDetailOverlay();
 
   overlay.innerHTML = `
@@ -646,7 +654,7 @@ function renderProductDetail(productId = state.openProductId) {
           </div>
           <div class="product-detail-actions">
             <input type="number" min="1" max="${stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled || loginRequired ? "disabled" : ""}>
-            <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : loginRequired ? "登入購買" : "加入購物車"}</button>
+            <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${actionText}</button>
           </div>
         </div>
       </div>
@@ -663,8 +671,16 @@ function addToCart(productId) {
 
   const market = currentMarket();
   const product = market?.products.find((entry) => entry.id === productId);
-  const variant = product ? selectedVariant(product) : null;
-  if (!market || !product || !variant || variant.stock <= 0) return;
+  const variant = product ? explicitSelectedVariant(product) : null;
+  if (!market || !product) return;
+  if (!variant) {
+    messageEl.textContent = "請先選擇品項";
+    return;
+  }
+  if (variant.stock <= 0) {
+    messageEl.textContent = "此品項已售完";
+    return;
+  }
 
   const key = cartKey(market.id, product.id, variant.id);
   const quantityInput = document.querySelector(`[data-add-quantity="${CSS.escape(product.id)}"]`);
@@ -731,7 +747,12 @@ document.addEventListener("click", (event) => {
 
   const variantButton = event.target.closest("[data-select-variant]");
   if (variantButton) {
-    state.selectedVariants[variantButton.dataset.selectVariant] = variantButton.dataset.variantId;
+    const productId = variantButton.dataset.selectVariant;
+    if (state.selectedVariants[productId] === variantButton.dataset.variantId) {
+      delete state.selectedVariants[productId];
+    } else {
+      state.selectedVariants[productId] = variantButton.dataset.variantId;
+    }
     if (state.openProductId) {
       renderProductDetail(state.openProductId);
     } else {
