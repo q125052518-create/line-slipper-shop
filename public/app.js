@@ -204,6 +204,10 @@ function productImage(product) {
   return product?.imageUrl || product?.variants?.find((variant) => variant.imageUrl)?.imageUrl || placeholderImage(product?.name || "商品");
 }
 
+function productListImage(product) {
+  return product?.imageUrl || placeholderImage(product?.name || "商品");
+}
+
 function selectedVariant(product) {
   const variants = product.variants || [];
   const selectedId = state.selectedVariants[product.id] || variants[0]?.id;
@@ -512,7 +516,7 @@ function renderProducts() {
 
   productsEl.innerHTML = products.map((product) => {
     const selected = selectedVariant(product);
-    const imageUrl = selected?.imageUrl || product.imageUrl || market.imageUrl || placeholderImage(product.name);
+    const imageUrl = productListImage(product);
     const disabled = !selected || selected.stock <= 0;
     const loginRequired = !state.buyer;
 
