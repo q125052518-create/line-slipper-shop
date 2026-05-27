@@ -13,6 +13,8 @@ const state = {
   buyer: null
 };
 
+let cartPopupTimer = null;
+
 const categoryLandingEl = document.querySelector("#categoryLanding");
 const subCategoryLandingEl = document.querySelector("#subCategoryLanding");
 const categoryTitleEl = document.querySelector("#categoryTitle");
@@ -76,6 +78,43 @@ function readCart() {
 function saveCart() {
   localStorage.setItem(CART_KEY, JSON.stringify(state.cart));
   renderCartCount();
+}
+
+function closeCartPopup() {
+  document.querySelector("[data-cart-popup]")?.classList.remove("is-visible");
+  if (cartPopupTimer) {
+    window.clearTimeout(cartPopupTimer);
+    cartPopupTimer = null;
+  }
+}
+
+function showCartPopup(message = "已加入購物車") {
+  let popup = document.querySelector("[data-cart-popup]");
+  if (!popup) {
+    popup = document.createElement("div");
+    popup.className = "cart-popup";
+    popup.dataset.cartPopup = "true";
+    popup.innerHTML = `
+      <div class="cart-popup-panel" role="dialog" aria-modal="true" aria-live="polite">
+        <strong data-cart-popup-message></strong>
+        <div class="cart-popup-actions">
+          <a href="/cart.html">查看購物車</a>
+          <button type="button" data-close-cart-popup>繼續逛逛</button>
+        </div>
+      </div>
+    `;
+    popup.addEventListener("click", (event) => {
+      if (event.target === popup || event.target.closest("[data-close-cart-popup]")) {
+        closeCartPopup();
+      }
+    });
+    document.body.appendChild(popup);
+  }
+
+  popup.querySelector("[data-cart-popup-message]").textContent = message;
+  popup.classList.add("is-visible");
+  if (cartPopupTimer) window.clearTimeout(cartPopupTimer);
+  cartPopupTimer = window.setTimeout(closeCartPopup, 2600);
 }
 
 function renderCartCount() {
@@ -712,6 +751,7 @@ function addToCart(productId) {
 
   saveCart();
   messageEl.textContent = `${product.name} - ${variant.name} x ${addQuantity} 已加入購物車`;
+  showCartPopup("已加入購物車");
 }
 
 document.addEventListener("click", (event) => {
