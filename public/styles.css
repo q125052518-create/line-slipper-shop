@@ -3015,8 +3015,20 @@ select {
 
 .product-edit-head {
   align-items: flex-start;
+  background: #ffffff;
   border-bottom: 1px solid #e5dfd5;
   padding-bottom: 12px;
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+}
+
+.product-edit-head-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .product-select-checkbox {

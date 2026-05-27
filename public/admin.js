@@ -484,7 +484,10 @@ function productEditFormMarkup(product) {
           <p>${escapeHtml(product.description || "")}</p>
           <p class="product-edit-summary">${escapeHtml(productBarcodeLabel(product))}｜${escapeHtml(productPriceLabel(product))}｜庫存 ${productStock(product)}</p>
         </div>
-        <button type="button" class="danger-button" data-delete-product="${escapeHtml(product.id)}">刪除商品</button>
+        <div class="product-edit-head-actions">
+          <button type="submit">儲存商品</button>
+          <button type="button" class="danger-button" data-delete-product="${escapeHtml(product.id)}">刪除商品</button>
+        </div>
       </div>
       <label>
         分類
@@ -513,7 +516,6 @@ function productEditFormMarkup(product) {
         ${productVariants(product).map((variant) => variantRow(variant)).join("")}
       </div>
       <button type="button" data-add-variant>新增品項</button>
-      <button type="submit">儲存商品</button>
     </form>
   `;
 }
