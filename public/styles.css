@@ -3813,6 +3813,11 @@ button.admin-chat-list-item.is-selected {
     position: static;
   }
 
+  .storefront-page .store-sidebar,
+  .storefront-page .storefront-shell.is-category-detail .store-sidebar {
+    display: none;
+  }
+
   .shop-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

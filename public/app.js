@@ -500,11 +500,13 @@ function renderStoreTabPanels() {
   const isStore = state.currentStoreTab === "store";
   const isProducts = state.currentStoreTab === "products";
   const isCategories = state.currentStoreTab === "categories";
+  const isCategoryProducts = isCategories && state.currentCategoryId !== "all";
   if (layoutBlocksEl) {
     layoutBlocksEl.classList.toggle("hidden", !isStore || layoutBlocksEl.dataset.hasBlocks !== "true");
   }
-  productShellEl?.classList.toggle("hidden", !isProducts);
-  categoryDirectoryEl?.classList.toggle("hidden", !isCategories);
+  productShellEl?.classList.toggle("hidden", !(isProducts || isCategoryProducts));
+  productShellEl?.classList.toggle("is-category-detail", isCategoryProducts);
+  categoryDirectoryEl?.classList.toggle("hidden", !isCategories || isCategoryProducts);
 }
 
 function renderSubCategories() {
@@ -756,7 +758,7 @@ document.addEventListener("click", (event) => {
     state.currentStoreTab = tabButton.dataset.storeTab || "store";
     normalizeStoreTabForViewport();
     closeProductDetail();
-    if (state.currentStoreTab === "products") {
+    if (["products", "categories"].includes(state.currentStoreTab)) {
       state.currentCategoryId = "all";
       state.selectedVariants = {};
     }
@@ -767,7 +769,7 @@ document.addEventListener("click", (event) => {
   const categoryButton = event.target.closest("[data-open-category]");
   if (categoryButton) {
     state.currentCategoryId = categoryButton.dataset.openCategory;
-    state.currentStoreTab = "products";
+    state.currentStoreTab = categoryDirectoryEl?.contains(categoryButton) ? "categories" : "products";
     state.selectedVariants = {};
     closeProductDetail();
     renderCatalog();
