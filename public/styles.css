@@ -3818,6 +3818,11 @@ button.admin-chat-list-item.is-selected {
     display: none;
   }
 
+  .storefront-page .sub-category-strip,
+  .storefront-page .shop-product-card .shop-product-category {
+    display: none;
+  }
+
   .shop-product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
