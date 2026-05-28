@@ -651,12 +651,17 @@ function renderProductDetail(productId = state.openProductId) {
       <button type="button" class="product-detail-close" aria-label="關閉" data-close-product-detail>×</button>
       <div class="product-detail-grid">
         <div class="product-detail-media">
-          <img class="product-detail-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+          <div class="product-detail-image-frame">
+            <img class="product-detail-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
+          </div>
+          <div class="product-detail-description">
+            <h3>商品介紹</h3>
+            <p>${escapeHtml(product.description || "精選商品")}</p>
+          </div>
         </div>
         <div class="product-detail-body">
           <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
           <h2>${escapeHtml(product.name)}</h2>
-          <p>${escapeHtml(product.description || "精選商品")}</p>
           <div class="product-detail-variant-list" role="list" aria-label="${escapeHtml(product.name)}品項">
             ${variants.length ? variants.map((variant) => {
               const isSelected = selected?.id === variant.id;
