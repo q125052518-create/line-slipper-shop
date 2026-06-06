@@ -1,0 +1,452 @@
+import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
+import { chromium } from "playwright";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "..");
+
+const shopBaseUrl = cleanBaseUrl(process.env.SHOP_BASE_URL || "https://line-slipper-shop.onrender.com");
+const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
+const productUrl = String(process.env.MYSHIP_PRODUCT_URL || "https://myship.7-11.com.tw/general/detail/GM2506169881759").trim();
+const chromeProfileDir = path.resolve(process.env.MYSHIP_CHROME_PROFILE_DIR || path.join(repoRoot, ".myship-chrome-profile"));
+const syncIntervalMs = Math.max(60000, Number(process.env.SYNC_INTERVAL_MS || 5 * 60 * 1000));
+const defaultTimeoutMs = Math.max(5000, Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000));
+const navTimeoutMs = Math.max(10000, Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000));
+const headless = parseFlag(process.env.MYSHIP_HEADLESS, false);
+const dryRun = parseFlag(process.env.MYSHIP_DRY_RUN, false);
+const facebookEmail = String(process.env.MYSHIP_FACEBOOK_EMAIL || "").trim();
+const facebookPassword = String(process.env.MYSHIP_FACEBOOK_PASSWORD || "").trim();
+
+const args = new Set(process.argv.slice(2));
+const checkOnly = args.has("--check");
+const runOnce = args.has("--once") || checkOnly;
+
+let cookieHeader = "";
+
+main().catch((error) => {
+  console.error(`[myship-sync] fatal: ${error.message}`);
+  process.exitCode = 1;
+});
+
+async function main() {
+  if (!adminPassword) throw new Error("ADMIN_PASSWORD is required in .env");
+  if (!productUrl) throw new Error("MYSHIP_PRODUCT_URL is required in .env");
+
+  if (checkOnly) {
+    await loginAdmin();
+    const pending = await getPendingOrders();
+    console.log(`[myship-sync] check ok. Pending orders: ${pending.orders.length}`);
+    return;
+  }
+
+  do {
+    await runSyncCycle();
+    if (runOnce) return;
+    await wait(syncIntervalMs);
+  } while (true);
+}
+
+async function runSyncCycle() {
+  await loginAdmin();
+  const pending = await getPendingOrders();
+  if (!pending.orders.length) {
+    console.log(`[myship-sync] no pending orders. Next check in ${Math.round(syncIntervalMs / 1000)}s`);
+    return;
+  }
+
+  if (dryRun) {
+    console.log(`[myship-sync] dry run. Would create ${pending.orders.length} orders.`);
+    return;
+  }
+
+  const context = await chromium.launchPersistentContext(chromeProfileDir, {
+    headless,
+    locale: "zh-TW",
+    args: ["--disable-dev-shm-usage"]
+  });
+
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(defaultTimeoutMs);
+    page.setDefaultNavigationTimeout(navTimeoutMs);
+    page.on("dialog", async (dialog) => dialog.accept().catch(() => {}));
+
+    for (const order of pending.orders) {
+      await processOrder(page, order);
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+async function processOrder(page, pendingOrder) {
+  const orderId = pendingOrder.id;
+  let claimedOrder = pendingOrder;
+
+  try {
+    const claim = await apiFetch(`/api/admin/myship/orders/${encodeURIComponent(orderId)}/claim`, {
+      method: "POST",
+      body: { productUrl }
+    });
+    claimedOrder = claim.order;
+  } catch (error) {
+    console.warn(`[myship-sync] skip ${orderId}: ${error.message}`);
+    return;
+  }
+
+  try {
+    const created = await createMyshipOrder(page, claimedOrder);
+    await apiFetch(`/api/admin/myship/orders/${encodeURIComponent(orderId)}/result`, {
+      method: "POST",
+      body: {
+        status: "created",
+        orderNo: created.orderNo || "",
+        quantity: created.quantity,
+        productUrl
+      }
+    });
+    console.log(`[myship-sync] created ${orderId}${created.orderNo ? ` -> ${created.orderNo}` : ""}`);
+  } catch (error) {
+    await apiFetch(`/api/admin/myship/orders/${encodeURIComponent(orderId)}/result`, {
+      method: "POST",
+      body: {
+        status: "failed",
+        error: error.message,
+        quantity: getMyshipQuantity(claimedOrder),
+        productUrl
+      }
+    }).catch((writeError) => {
+      console.error(`[myship-sync] failed to write error for ${orderId}: ${writeError.message}`);
+    });
+    console.error(`[myship-sync] failed ${orderId}: ${error.message}`);
+  }
+}
+
+async function createMyshipOrder(page, order) {
+  const quantity = getMyshipQuantity(order);
+  await page.goto(productUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  await dismissDialogs(page);
+  await ensureMyshipLoggedIn(page);
+
+  await clickFirst(page, [
+    ".product_size_switch span[data-spec-price='1']",
+    ".product_size_switch span[data-spec-name='1']"
+  ], "amount option 1");
+
+  const quantityInput = page.locator("input.qty.available, input.qty, input[name*='Qty']").first();
+  await quantityInput.waitFor({ state: "visible", timeout: defaultTimeoutMs });
+  await setInputValue(page, quantityInput, String(quantity));
+
+  const enteredCart = await clickCreateCart(page);
+  if (!enteredCart) throw new Error("Could not enter MyShip checkout page");
+
+  await confirmCartAmount(page, quantity);
+  await fillCheckoutData(page, order);
+  await submitMyshipOrder(page);
+
+  const text = await bodyText(page);
+  return {
+    quantity,
+    orderNo: extractMyshipOrderNo(`${text}\n${page.url()}`)
+  };
+}
+
+async function ensureMyshipLoggedIn(page) {
+  if (!await needsLogin(page)) return;
+
+  await submitFacebookLogin(page);
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => null),
+    wait(5000)
+  ]);
+
+  const facebookPage = page.context().pages().find((entry) => entry.url().includes("facebook.com"));
+  if (facebookPage) {
+    await completeFacebookLogin(facebookPage);
+    await Promise.race([
+      facebookPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null),
+      wait(5000)
+    ]);
+  }
+
+  await page.goto(productUrl, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(1500);
+  await dismissDialogs(page);
+
+  if (await needsLogin(page)) {
+    throw new Error("MyShip still needs login. Open the same Chrome profile manually and finish Facebook/MyShip login first.");
+  }
+}
+
+async function completeFacebookLogin(page) {
+  if (!page.url().includes("facebook.com")) return;
+  if (facebookEmail) {
+    const emailInput = page.locator("input[name='email'], input#email, input[autocomplete*='username']").first();
+    if (await emailInput.count()) await emailInput.fill(facebookEmail).catch(() => {});
+  }
+  if (facebookPassword) {
+    const passInput = page.locator("input[name='pass'], input#pass, input[type='password']").first();
+    if (await passInput.count()) {
+      await passInput.fill(facebookPassword).catch(() => {});
+      await passInput.press("Enter").catch(() => {});
+    }
+  }
+
+  await wait(5000);
+  if (/checkpoint|captcha|recover|two_factor|approvals|login_help/i.test(page.url())) {
+    throw new Error("Facebook requires manual verification in this Chrome profile.");
+  }
+}
+
+async function submitFacebookLogin(page) {
+  const submitted = await page.evaluate(() => {
+    const forms = [...document.querySelectorAll("form")];
+    const form = forms.find((entry) => String(entry.action || "").includes("/SocialNetwork/ExternalLogin"));
+    const button = form?.querySelector('button[name="provider"][value="Facebook"]');
+    if (button) {
+      button.click();
+      return true;
+    }
+
+    const fallback = [...document.querySelectorAll("button, a")].find((entry) => /facebook/i.test(entry.textContent || entry.className || ""));
+    if (fallback) {
+      fallback.click();
+      return true;
+    }
+    return false;
+  });
+  if (!submitted) throw new Error("Could not find MyShip Facebook login button");
+}
+
+async function clickCreateCart(page) {
+  await clickFirst(page, [
+    "button[onclick*='addAndCreateCart']",
+    "button[onclick*='createCart']",
+    "button.btn-addtocart"
+  ], "create cart");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
+    page.waitForURL(/\/cart\/confirm\//, { timeout: 30000 }).catch(() => null),
+    page.locator("#btnNext, button#btnNext, input#btnNext").first().waitFor({ timeout: 30000 }).catch(() => null)
+  ]);
+
+  await dismissDialogs(page);
+  return await page.locator("#btnNext, button#btnNext, input#btnNext, #RcvName, input[name='RcvName']").count() > 0;
+}
+
+async function confirmCartAmount(page, quantity) {
+  const hasRecipientFields = await page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").count();
+  if (hasRecipientFields) return;
+
+  const qtyInput = page.locator("input[name='Card_Qty_1'], input[id^='Card_Qty'], input[name*='Card_Qty'], input.qty").first();
+  if (await qtyInput.count()) await setInputValue(page, qtyInput, String(quantity));
+
+  const agree = page.locator("#Agree, input[name='Agree'], input[type='checkbox'][name*='Agree']").first();
+  if (await agree.count()) await agree.check({ force: true }).catch(() => {});
+
+  await clickFirst(page, [
+    "#btnNext",
+    "button#btnNext",
+    "input#btnNext",
+    "input[type='submit']"
+  ], "next checkout");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
+    page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 30000 }).catch(() => null)
+  ]);
+  await dismissDialogs(page);
+}
+
+async function fillCheckoutData(page, order) {
+  const store = order.sevenElevenStore || {};
+  const result = await page.evaluate(({ name, phone, storeId, storeName, storeAddress }) => {
+    const setElementValue = (element, value) => {
+      if (!element || !value) return false;
+      if ("value" in element) {
+        element.focus?.();
+        element.value = value;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        element.textContent = value;
+      }
+      return true;
+    };
+    const setFirst = (selectors, value) => {
+      for (const selector of selectors) {
+        if (setElementValue(document.querySelector(selector), value)) return true;
+      }
+      return false;
+    };
+
+    const nameOk = setFirst(["#RcvName", "input[name='RcvName']", "#ReceiverName", "input[name='ReceiverName']"], name);
+    const phoneOk = setFirst(["#RcvMobile", "input[name='RcvMobile']", "#ReceiverMobile", "input[name='ReceiverMobile']"], phone);
+    const storeOk = [
+      setFirst(["#RcvStoreID", "input[name='RcvStoreID']", "#CvsStoreID", "input[name='CvsStoreID']", "input[name='StoreID']"], storeId),
+      setFirst(["#RcvStoreName", "input[name='RcvStoreName']", "#CvsStoreName", "input[name='CvsStoreName']", "input[name='StoreName']"], storeName),
+      setFirst(["#RcvStoreAddress", "input[name='RcvStoreAddress']", "#CvsStoreAddress", "input[name='CvsStoreAddress']", "input[name='StoreAddress']"], storeAddress)
+    ].some(Boolean);
+
+    return { nameOk, phoneOk, storeOk };
+  }, {
+    name: order.customerName || "",
+    phone: order.phone || "",
+    storeId: store.id || "",
+    storeName: store.name || "",
+    storeAddress: store.address || order.deliveryAddress || ""
+  });
+
+  if (!result.nameOk || !result.phoneOk) throw new Error("Could not fill MyShip recipient name or phone");
+  if (!result.storeOk) throw new Error("Could not fill MyShip 7-11 store fields");
+}
+
+async function submitMyshipOrder(page) {
+  await clickFirst(page, [
+    "button[type='submit']",
+    "input[type='submit']",
+    "button:has-text('送出')",
+    "button:has-text('確認')"
+  ], "submit order");
+
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
+    wait(5000)
+  ]);
+  await dismissDialogs(page);
+}
+
+async function needsLogin(page) {
+  if (page.url().includes("facebook.com") || page.url().includes("access.line.me")) return true;
+  const loginButton = page.locator("button.btn-soclial-login-facebook, button:has-text('Facebook')").first();
+  if (await loginButton.isVisible({ timeout: 1000 }).catch(() => false)) return true;
+  const text = await bodyText(page);
+  return /Facebook|uniopen|login|登入/.test(text) && /登入|Login/.test(text);
+}
+
+async function dismissDialogs(page) {
+  for (let round = 0; round < 3; round += 1) {
+    let clicked = false;
+    for (const selector of [
+      "#alertify-ok",
+      ".alertify-button-ok",
+      "button.mfp-close",
+      "button:has-text('OK')",
+      "button:has-text('確認')"
+    ]) {
+      const locator = page.locator(selector).first();
+      if (await locator.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await locator.click({ force: true }).catch(() => {});
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) break;
+    await page.waitForTimeout(300);
+  }
+}
+
+async function clickFirst(page, selectors, label) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = Math.min(await locator.count().catch(() => 0), 20);
+    for (let index = 0; index < count; index += 1) {
+      const item = locator.nth(index);
+      if (!await item.isVisible().catch(() => false)) continue;
+      await item.click({ timeout: 8000 }).catch(async () => item.click({ timeout: 8000, force: true }));
+      return;
+    }
+  }
+  throw new Error(`Could not click ${label}`);
+}
+
+async function setInputValue(page, locator, value) {
+  await locator.fill(value).catch(async () => {
+    const handle = await locator.elementHandle();
+    if (!handle) throw new Error("Input not found");
+    await page.evaluate(({ element, nextValue }) => {
+      element.value = nextValue;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }, { element: handle, nextValue: value });
+  });
+  await page.waitForTimeout(500);
+}
+
+function getMyshipQuantity(order) {
+  const value = Number(order?.myshipQuantity || order?.productTotal || order?.totalAmount || 0);
+  return Math.max(1, Math.round(Number.isFinite(value) ? value : 0));
+}
+
+function extractMyshipOrderNo(text) {
+  const cleanText = String(text || "");
+  const directMatch = cleanText.match(/\bC[MC]\d{8,}\b/i);
+  if (directMatch) return directMatch[0].toUpperCase();
+  const fallback = cleanText.match(/\b[A-Z]{1,3}\d{8,}\b/i);
+  return fallback ? fallback[0].toUpperCase() : "";
+}
+
+async function loginAdmin() {
+  const response = await fetch(`${shopBaseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: adminPassword })
+  });
+  if (!response.ok) throw new Error(`Admin login failed: ${response.status} ${await response.text()}`);
+  cookieHeader = parseSetCookie(response.headers.get("set-cookie"));
+  if (!cookieHeader) throw new Error("Admin login did not return a session cookie");
+}
+
+async function getPendingOrders() {
+  return apiFetch("/api/admin/myship/pending-orders");
+}
+
+async function apiFetch(pathname, { method = "GET", body } = {}) {
+  const response = await fetch(`${shopBaseUrl}${pathname}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": cookieHeader
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const text = await response.text();
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { message: text };
+  }
+  if (!response.ok) throw new Error(payload.message || `${method} ${pathname} failed with ${response.status}`);
+  return payload;
+}
+
+async function bodyText(page) {
+  return page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+}
+
+function parseSetCookie(value) {
+  if (!value) return "";
+  return value
+    .split(/,\s*(?=[^=;,]+=[^;,]+)/)
+    .map((part) => part.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
+function cleanBaseUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function parseFlag(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
+    "myship-sync": "node scripts/myship-sync.js",
     "postinstall": "playwright install chromium",
     "start": "node server.js"
   },

@@ -47,7 +47,7 @@ const mallbicOrderAutoSyncIntervalMs = Math.max(60000, Number(process.env.MALLBI
 const myshipProductUrl = String(process.env.MYSHIP_PRODUCT_URL || "https://myship.7-11.com.tw/general/detail/GM2506169881759").trim();
 const myshipFacebookEmail = String(process.env.MYSHIP_FACEBOOK_EMAIL || "").trim();
 const myshipFacebookPassword = String(process.env.MYSHIP_FACEBOOK_PASSWORD || "").trim();
-const myshipAutoOrderEnabled = parseEnvFlag(process.env.MYSHIP_AUTO_ORDER_ENABLED, true);
+const myshipAutoOrderEnabled = parseEnvFlag(process.env.MYSHIP_AUTO_ORDER_ENABLED, false);
 const myshipAutoOrderIntervalMs = Math.max(60000, Number(process.env.MYSHIP_AUTO_ORDER_INTERVAL_MS || 5 * 60 * 1000));
 const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "productTotal").trim();
 const myshipDefaultTimeoutMs = Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000);
@@ -55,6 +55,7 @@ const myshipNavTimeoutMs = Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000);
 const myshipBrowserProfileDir = String(process.env.MYSHIP_BROWSER_PROFILE_DIR || path.join(dataDir, "myship-browser-profile")).trim();
 const myshipHeadless = parseEnvFlag(process.env.MYSHIP_HEADLESS, true);
 const myshipManualLoginWindowMs = Math.max(60000, Number(process.env.MYSHIP_MANUAL_LOGIN_WINDOW_MS || 3 * 60 * 1000));
+const myshipClaimTimeoutMs = Math.max(60000, Number(process.env.MYSHIP_CLAIM_TIMEOUT_MS || 30 * 60 * 1000));
 let mallbicSyncRunning = false;
 let mallbicOrderSyncRunning = false;
 let mallbicOrderStatusSyncRunning = false;
@@ -2084,6 +2085,75 @@ app.get("/api/admin/myship/order-sync-status", async (_req, res) => {
   });
 });
 
+app.get("/api/admin/myship/pending-orders", async (_req, res) => {
+  const orders = await readOrders();
+  const pendingOrders = orders
+    .filter((order) => shouldCreateOrderInMyship(order))
+    .map((order) => ({
+      ...order,
+      myship: normalizeOrderMyshipSync(order),
+      myshipQuantity: getMyshipOrderQuantity(order)
+    }));
+
+  res.json({
+    orders: pendingOrders,
+    count: pendingOrders.length,
+    productUrl: myshipProductUrl,
+    amountSource: myshipAmountSource,
+    claimTimeoutMs: myshipClaimTimeoutMs
+  });
+});
+
+app.post("/api/admin/myship/orders/:id/claim", async (req, res) => {
+  const orders = await readOrders();
+  const order = orders.find((entry) => entry.id === req.params.id);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (!shouldCreateOrderInMyship(order)) {
+    return res.status(409).json({ message: "Order is not pending MyShip creation", order });
+  }
+
+  const now = new Date().toISOString();
+  order.myship = normalizeOrderMyshipSync(order);
+  order.myship.createStatus = "creating";
+  order.myship.updatedAt = now;
+  order.myship.error = "";
+  order.myship.productUrl = String(req.body?.productUrl || myshipProductUrl || "").trim();
+  order.myship.quantity = getMyshipOrderQuantity(order);
+
+  await writeOrders(orders);
+  res.json({ order });
+});
+
+app.post("/api/admin/myship/orders/:id/result", async (req, res) => {
+  const createStatus = String(req.body?.status || req.body?.createStatus || "").trim();
+  if (!["created", "failed"].includes(createStatus)) {
+    return res.status(400).json({ message: "status must be created or failed" });
+  }
+
+  const orders = await readOrders();
+  const order = orders.find((entry) => entry.id === req.params.id);
+  if (!order) return res.status(404).json({ message: "Order not found" });
+
+  order.myship = normalizeOrderMyshipSync(order);
+  const now = new Date().toISOString();
+  order.myship.createStatus = createStatus;
+  order.myship.updatedAt = now;
+  order.myship.productUrl = String(req.body?.productUrl || order.myship.productUrl || myshipProductUrl || "").trim();
+  order.myship.quantity = Math.max(1, Number(req.body?.quantity || order.myship.quantity || getMyshipOrderQuantity(order)));
+  order.myship.lastScreenshot = String(req.body?.lastScreenshot || "");
+
+  if (createStatus === "created") {
+    order.myship.createdAt = order.myship.createdAt || now;
+    order.myship.orderNo = String(req.body?.orderNo || "").trim();
+    order.myship.error = "";
+  } else {
+    order.myship.error = String(req.body?.error || "MyShip creation failed").trim();
+  }
+
+  await writeOrders(orders);
+  res.json({ order });
+});
+
 app.get("/api/admin/myship/screenshots/:filename", async (req, res) => {
   const filename = path.basename(String(req.params.filename || ""));
   if (!filename || !filename.endsWith(".png")) {
@@ -2123,7 +2193,14 @@ function shouldCreateOrderInMyship(order) {
   if (!isSevenElevenOrder(order)) return false;
   if (normalizeOrderStatus(order.status) === "cancelled") return false;
   const status = normalizeOrderMyshipSync(order).createStatus;
-  return !["created", "creating", "skipped", "notNeeded"].includes(status);
+  if (status === "creating") return isStaleMyshipClaim(order);
+  return !["created", "skipped", "notNeeded"].includes(status);
+}
+
+function isStaleMyshipClaim(order) {
+  const updatedAt = Date.parse(normalizeOrderMyshipSync(order).updatedAt || "");
+  if (!Number.isFinite(updatedAt)) return true;
+  return Date.now() - updatedAt > myshipClaimTimeoutMs;
 }
 
 function getMyshipOrderQuantity(order) {
