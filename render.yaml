@@ -57,7 +57,7 @@ services:
       - key: MYSHIP_FACEBOOK_PASSWORD
         sync: false
       - key: MYSHIP_AUTO_ORDER_ENABLED
-        value: "true"
+        value: "false"
       - key: MYSHIP_AUTO_ORDER_INTERVAL_MS
         value: "300000"
       - key: MYSHIP_AMOUNT_SOURCE
