@@ -8,6 +8,8 @@ data/mallbic-sync.json
 data/orders.json
 data/myship-order-sync.json
 data/myship-browser-profile/
+data/local-myship-chrome-profile/
 data/myship-*.png
+logs/
 data/*.backup-*.json
 data/orders.before-*.json

@@ -18,6 +18,7 @@ const headless = parseFlag(process.env.MYSHIP_HEADLESS, false);
 const dryRun = parseFlag(process.env.MYSHIP_DRY_RUN, false);
 const facebookEmail = String(process.env.MYSHIP_FACEBOOK_EMAIL || "").trim();
 const facebookPassword = String(process.env.MYSHIP_FACEBOOK_PASSWORD || "").trim();
+const browserChannel = String(process.env.MYSHIP_BROWSER_CHANNEL || "chrome").trim();
 
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has("--check");
@@ -62,6 +63,7 @@ async function runSyncCycle() {
   }
 
   const context = await chromium.launchPersistentContext(chromeProfileDir, {
+    channel: browserChannel || undefined,
     headless,
     locale: "zh-TW",
     args: ["--disable-dev-shm-usage"]
@@ -130,10 +132,12 @@ async function createMyshipOrder(page, order) {
   await page.waitForTimeout(1500);
   await dismissDialogs(page);
   await ensureMyshipLoggedIn(page);
+  await clearMyshipCart(page);
 
   await clickFirst(page, [
     ".product_size_switch span[data-spec-price='1']",
-    ".product_size_switch span[data-spec-name='1']"
+    ".product_size_switch span[data-spec-name='金額']",
+    ".product_size_switch span:has-text('金額')"
   ], "amount option 1");
 
   const quantityInput = page.locator("input.qty.available, input.qty, input[name*='Qty']").first();
@@ -148,14 +152,27 @@ async function createMyshipOrder(page, order) {
   await submitMyshipOrder(page);
 
   const text = await bodyText(page);
+  const orderNo = extractMyshipOrderNo(`${text}\n${page.url()}`);
+  if (!orderNo) {
+    throw new Error(`MyShip checkout did not return an order number. Final URL: ${page.url()}. Page: ${summarizePageText(text)}`);
+  }
+
   return {
     quantity,
-    orderNo: extractMyshipOrderNo(`${text}\n${page.url()}`)
+    orderNo
   };
 }
 
+async function clearMyshipCart(page) {
+  await page.evaluate(() => {
+    if (typeof window.clearCart === "function") window.clearCart();
+  }).catch(() => {});
+  await page.waitForTimeout(1000);
+  await dismissDialogs(page);
+}
+
 async function ensureMyshipLoggedIn(page) {
-  if (!await needsLogin(page)) return;
+  if (!await needsMyshipLogin(page)) return;
 
   await submitFacebookLogin(page);
   await Promise.race([
@@ -176,8 +193,8 @@ async function ensureMyshipLoggedIn(page) {
   await page.waitForTimeout(1500);
   await dismissDialogs(page);
 
-  if (await needsLogin(page)) {
-    throw new Error("MyShip still needs login. Open the same Chrome profile manually and finish Facebook/MyShip login first.");
+  if (await needsMyshipLogin(page)) {
+    throw new Error("MyShip still needs uniopen login. Open the same Chrome profile manually, finish Facebook/MyShip login, then click OK on the MyShip login prompt and confirm the product can be added to cart.");
   }
 }
 
@@ -228,6 +245,14 @@ async function clickCreateCart(page) {
     "button.btn-addtocart"
   ], "create cart");
 
+  await page.waitForTimeout(1200);
+  if (!/\/cart\//i.test(page.url())) {
+    await clickFirst(page, [
+      "button[onclick='createCart()']",
+      "button[onclick*='createCart']"
+    ], "confirm create cart");
+  }
+
   await Promise.race([
     page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
     page.waitForURL(/\/cart\/confirm\//, { timeout: 30000 }).catch(() => null),
@@ -246,7 +271,20 @@ async function confirmCartAmount(page, quantity) {
   if (await qtyInput.count()) await setInputValue(page, qtyInput, String(quantity));
 
   const agree = page.locator("#Agree, input[name='Agree'], input[type='checkbox'][name*='Agree']").first();
-  if (await agree.count()) await agree.check({ force: true }).catch(() => {});
+  if (await agree.count()) {
+    await agree.check({ force: true }).catch(async () => {
+      await page.evaluate(() => {
+        for (const selector of ["#Agree", "input[name='Agree']", "input[type='checkbox'][name*='Agree']"]) {
+          const input = document.querySelector(selector);
+          if (!input) continue;
+          input.checked = true;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
+      });
+    });
+  }
 
   await clickFirst(page, [
     "#btnNext",
@@ -259,54 +297,197 @@ async function confirmCartAmount(page, quantity) {
     page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
     page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 30000 }).catch(() => null)
   ]);
+
+  if (!await page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").count() && /\/cart\/confirm\//i.test(page.url())) {
+    await page.evaluate(() => {
+      const agreeInput = document.querySelector("#Agree");
+      if (agreeInput) {
+        agreeInput.checked = true;
+        agreeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        agreeInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      document.forms[0]?.submit();
+    }).catch(() => {});
+    await Promise.race([
+      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
+      page.locator("#RcvName, input[name='RcvName'], #RcvMobile, input[name='RcvMobile']").first().waitFor({ timeout: 30000 }).catch(() => null)
+    ]);
+  }
   await dismissDialogs(page);
 }
 
 async function fillCheckoutData(page, order) {
   const store = order.sevenElevenStore || {};
-  const result = await page.evaluate(({ name, phone, storeId, storeName, storeAddress }) => {
-    const setElementValue = (element, value) => {
-      if (!element || !value) return false;
-      if ("value" in element) {
-        element.focus?.();
-        element.value = value;
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-        element.dispatchEvent(new Event("change", { bubbles: true }));
-      } else {
-        element.textContent = value;
-      }
-      return true;
-    };
-    const setFirst = (selectors, value) => {
-      for (const selector of selectors) {
-        if (setElementValue(document.querySelector(selector), value)) return true;
-      }
-      return false;
-    };
+  const name = String(order.customerName || "").trim().slice(0, 10);
+  const phone = normalizePhone(order.phone || "");
+  const storeId = String(store.id || "").trim();
 
-    const nameOk = setFirst(["#RcvName", "input[name='RcvName']", "#ReceiverName", "input[name='ReceiverName']"], name);
-    const phoneOk = setFirst(["#RcvMobile", "input[name='RcvMobile']", "#ReceiverMobile", "input[name='ReceiverMobile']"], phone);
-    const storeOk = [
-      setFirst(["#RcvStoreID", "input[name='RcvStoreID']", "#CvsStoreID", "input[name='CvsStoreID']", "input[name='StoreID']"], storeId),
-      setFirst(["#RcvStoreName", "input[name='RcvStoreName']", "#CvsStoreName", "input[name='CvsStoreName']", "input[name='StoreName']"], storeName),
-      setFirst(["#RcvStoreAddress", "input[name='RcvStoreAddress']", "#CvsStoreAddress", "input[name='CvsStoreAddress']", "input[name='StoreAddress']"], storeAddress)
-    ].some(Boolean);
+  if (!name) throw new Error("Missing recipient name for MyShip checkout");
+  if (!phone) throw new Error("Missing recipient phone for MyShip checkout");
+  if (!storeId) throw new Error("Missing 7-11 store id for MyShip checkout");
 
-    return { nameOk, phoneOk, storeOk };
-  }, {
-    name: order.customerName || "",
-    phone: order.phone || "",
-    storeId: store.id || "",
-    storeName: store.name || "",
-    storeAddress: store.address || order.deliveryAddress || ""
+  await fillVisibleField(page, "#RcvName, input[name='RcvName']", name);
+  await fillVisibleField(page, "#RcvMobile, input[name='RcvMobile']", phone);
+  await selectMyshipPickupStore(page, storeId);
+  await fillVisibleField(page, "#RcvName, input[name='RcvName']", name);
+  await fillVisibleField(page, "#RcvMobile, input[name='RcvMobile']", phone);
+
+  const result = await page.evaluate(() => ({
+    name: document.querySelector("#RcvName, input[name='RcvName']")?.value || "",
+    phone: document.querySelector("#RcvMobile, input[name='RcvMobile']")?.value || "",
+    storeId: document.querySelector("#RcvStoreID, input[name='RcvStoreID']")?.value || "",
+    storeName: document.querySelector("#RcvStoreName, input[name='RcvStoreName']")?.value || "",
+    storeAddress: document.querySelector("#RcvStoreAddress, input[name='RcvStoreAddress']")?.value || ""
+  }));
+
+  if (!result.name || !result.phone) throw new Error("Could not fill MyShip recipient name or phone");
+  if (!result.storeId || !result.storeName || !result.storeAddress) {
+    throw new Error("Could not select MyShip 7-11 pickup store");
+  }
+}
+
+async function fillVisibleField(page, selector, value) {
+  const locator = page.locator(selector).first();
+  await locator.waitFor({ state: "visible", timeout: defaultTimeoutMs });
+  await locator.fill(value);
+  await locator.evaluate((element) => {
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new Event("blur", { bubbles: true }));
+  }).catch(() => {});
+}
+
+async function selectMyshipPickupStore(page, storeId) {
+  await page.evaluate(() => {
+    if (typeof window.jsEmap === "function") window.jsEmap();
   });
+  await Promise.race([
+    page.waitForURL(/emap\.pcsc\.com\.tw\/mobilemap\//, { timeout: 30000 }).catch(() => null),
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null)
+  ]);
+  await wait(2500);
 
-  if (!result.nameOk || !result.phoneOk) throw new Error("Could not fill MyShip recipient name or phone");
-  if (!result.storeOk) throw new Error("Could not fill MyShip 7-11 store fields");
+  let frame = await waitForFrame(page, /Address\/Default\.aspx|Id\/Default\.aspx/i, 30000);
+  if (!/Id\/Default\.aspx/i.test(frame.url())) {
+    await frame.locator('a[href*="../Id/Default.aspx"]').click({ force: true });
+    frame = await waitForFrame(page, /Id\/Default\.aspx/i, 30000);
+  }
+
+  await frame.locator("#inputKey").fill(storeId);
+  await frame.locator("#send").click({ force: true });
+  await waitForFrameFunction(frame, (id) => {
+    return [...document.querySelectorAll("li")].some((entry) => String(entry.getAttribute("onclick") || "").includes(id));
+  }, storeId, "7-11 store id search result");
+  await frame.evaluate((id) => {
+    if (typeof window.GoMap === "function") {
+      window.GoMap(id);
+      return;
+    }
+    const entry = [...document.querySelectorAll("li")].find((item) => String(item.getAttribute("onclick") || "").includes(id));
+    entry?.click();
+  }, storeId);
+
+  frame = await waitForActionFrame(page, /Map\/Default\.aspx|mobilemap\/map\.aspx/i, "SendInfo", "7-11 map SendInfo");
+  await clickFrameControl(frame, [
+    "img[onclick*='SendInfo']",
+    "#OK img",
+    "#OK"
+  ], () => typeof window.SendInfo === "function" && window.SendInfo(), "7-11 map SendInfo");
+
+  frame = await waitForActionFrame(page, /Info\/NotifyUser\.aspx/i, "OK", "7-11 notify OK");
+  await clickFrameControl(frame, [
+    "#IMG1",
+    "img[onclick*='OK']"
+  ], () => typeof window.OK === "function" && window.OK(), "7-11 notify OK");
+
+  frame = await waitForActionFrame(page, /Info\/Default\.aspx/i, "Submit", "7-11 store submit");
+  await clickFrameControl(frame, [
+    "#IMG1",
+    "img[onclick*='Submit']"
+  ], () => typeof window.Submit === "function" && window.Submit(), "7-11 store submit");
+
+  await Promise.race([
+    page.waitForURL(/myship\.7-11\.com\.tw\/cart\/detail/i, { timeout: 30000 }).catch(() => null),
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => null),
+    page.locator("#RcvStoreID, input[name='RcvStoreID']").first().waitFor({ timeout: 30000 }).catch(() => null)
+  ]);
+  await dismissDialogs(page);
+}
+
+async function waitForFrame(page, pattern, timeoutMs) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const frame = page.frames().find((entry) => pattern.test(entry.url()));
+    if (frame) return frame;
+    await wait(250);
+  }
+  throw new Error(`Timed out waiting for frame ${pattern}`);
+}
+
+async function waitForActionFrame(page, urlPattern, actionName, label) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30000) {
+    for (const frame of page.frames()) {
+      if (!urlPattern.test(frame.url())) continue;
+      const hasAction = await frame.evaluate((name) => {
+        return typeof window[name] === "function"
+          || Boolean(document.querySelector(`[onclick*="${name}"]`));
+      }, actionName).catch(() => false);
+      if (hasAction) return frame;
+    }
+    await wait(250);
+  }
+  const urls = page.frames().map((entry) => entry.url()).join(" | ");
+  throw new Error(`${label}: timed out waiting for action ${actionName}. Frames: ${urls}`);
+}
+
+async function waitForFrameFunction(frame, pageFunction, arg, label) {
+  try {
+    return await frame.waitForFunction(pageFunction, arg, { timeout: 30000 });
+  } catch (error) {
+    throw new Error(`${label}: ${error.message}`);
+  }
+}
+
+async function clickFrameControl(frame, selectors, fallbackFunction, label) {
+  for (const selector of selectors) {
+    const locator = frame.locator(selector).first();
+    if (!await locator.isVisible({ timeout: 5000 }).catch(() => false)) continue;
+    await locator.click({ force: true });
+    return;
+  }
+
+  try {
+    await frame.waitForFunction(fallbackFunction, null, { timeout: 10000 });
+    return;
+  } catch (error) {
+    const details = await describeFrame(frame).catch(() => "");
+    throw new Error(`${label}: ${error.message}${details ? ` ${details}` : ""}`);
+  }
+}
+
+async function describeFrame(frame) {
+  const snapshot = await frame.evaluate(() => ({
+    url: location.href,
+    title: document.title,
+    readyState: document.readyState,
+    text: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 200),
+    controls: [...document.querySelectorAll("img, button, a, input")]
+      .slice(0, 25)
+      .map((element) => ({
+        tag: element.tagName,
+        id: element.id || "",
+        onclick: element.getAttribute("onclick") || "",
+        text: (element.innerText || element.value || element.alt || element.title || "").trim().slice(0, 40)
+      }))
+  }));
+  return `Frame: ${JSON.stringify(snapshot)}`;
 }
 
 async function submitMyshipOrder(page) {
   await clickFirst(page, [
+    "input#btnNext[value='送出結帳']",
+    "#btnNext",
     "button[type='submit']",
     "input[type='submit']",
     "button:has-text('送出')",
@@ -318,6 +499,23 @@ async function submitMyshipOrder(page) {
     wait(5000)
   ]);
   await dismissDialogs(page);
+}
+
+async function needsMyshipLogin(page) {
+  if (page.url().includes("facebook.com") || page.url().includes("access.line.me")) return true;
+
+  const alertText = await page
+    .locator("#alertify .alertify-message, .alertify-message")
+    .first()
+    .innerText({ timeout: 1000 })
+    .catch(() => "");
+  if (/請登入|uniopen|會員再開始選購|登入/.test(alertText)) return true;
+
+  const loginButton = page.locator("button.btn-soclial-login-facebook, button:has-text('Facebook')").first();
+  if (await loginButton.isVisible({ timeout: 1000 }).catch(() => false)) return true;
+
+  const text = await bodyText(page);
+  return /Facebook|uniopen|login|登入|會員再開始選購/.test(text) && /登入|Login|會員再開始選購/.test(text);
 }
 
 async function needsLogin(page) {
@@ -382,6 +580,10 @@ function getMyshipQuantity(order) {
   return Math.max(1, Math.round(Number.isFinite(value) ? value : 0));
 }
 
+function normalizePhone(value) {
+  return String(value || "").replace(/\D+/g, "").slice(0, 10);
+}
+
 function extractMyshipOrderNo(text) {
   const cleanText = String(text || "");
   const directMatch = cleanText.match(/\bC[MC]\d{8,}\b/i);
@@ -427,6 +629,10 @@ async function apiFetch(pathname, { method = "GET", body } = {}) {
 
 async function bodyText(page) {
   return page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+}
+
+function summarizePageText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 function parseSetCookie(value) {
