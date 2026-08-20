@@ -376,9 +376,8 @@ function layoutProductsForBlock(block) {
 function renderLayoutBanner(block) {
   const imageUrls = (Array.isArray(block.imageUrls) ? block.imageUrls : []).filter(Boolean);
   const firstImage = imageUrls[0];
-  const content = firstImage
-    ? `<img src="${escapeHtml(firstImage)}" alt="${escapeHtml(block.title || "賣場看板")}" onerror="this.closest('.store-banner-block').classList.add('has-broken-image');">`
-    : `<div class="store-banner-placeholder"><strong>${escapeHtml(block.title || "賣場看板")}</strong><span>尚未設定看板圖片</span></div>`;
+  if (!firstImage) return "";
+  const content = `<img src="${escapeHtml(firstImage)}" alt="${escapeHtml(block.title || "賣場看板")}" onerror="this.closest('.store-banner-block').classList.add('has-broken-image');">`;
   const body = block.linkUrl
     ? `<a href="${escapeHtml(block.linkUrl)}" class="store-banner-link">${content}</a>`
     : content;
@@ -401,6 +400,7 @@ function renderLayoutNotice(block) {
 
 function renderLayoutCategoryGrid(block) {
   const categories = layoutBlockCategories(block);
+  if (!categories.length) return "";
   const columns = Math.min(6, Math.max(3, Number(block.columns || 5)));
   return `
     <section class="store-layout-section store-category-section">
@@ -419,8 +419,8 @@ function renderLayoutCategoryGrid(block) {
   `;
 }
 
-function renderLayoutProductBlock(block) {
-  const products = layoutProductsForBlock(block);
+function renderLayoutProductBlock(block, products = layoutProductsForBlock(block)) {
+  if (!products.length) return "";
   return `
     <section class="store-layout-section store-product-strip-section">
       <div class="store-layout-section-head">
@@ -452,15 +452,23 @@ function renderLayoutBlocks() {
     return;
   }
 
-  layoutBlocksEl.dataset.hasBlocks = "true";
-  layoutBlocksEl.classList.remove("hidden");
-  layoutBlocksEl.innerHTML = visibleBlocks.map((block) => {
+  const compactCatalog = marketProducts().length <= 6;
+  const shownProductIds = new Set();
+  const layoutHtml = visibleBlocks.map((block) => {
     if (block.type === "banner") return renderLayoutBanner(block);
     if (block.type === "notice") return renderLayoutNotice(block);
     if (block.type === "category-grid") return renderLayoutCategoryGrid(block);
-    if (["featured-products", "new-products", "hot-products"].includes(block.type)) return renderLayoutProductBlock(block);
+    if (["featured-products", "new-products", "hot-products"].includes(block.type)) {
+      const products = layoutProductsForBlock(block).filter((product) => !compactCatalog || !shownProductIds.has(product.id));
+      products.forEach((product) => shownProductIds.add(product.id));
+      return renderLayoutProductBlock(block, products);
+    }
     return "";
   }).join("");
+
+  layoutBlocksEl.innerHTML = layoutHtml;
+  layoutBlocksEl.dataset.hasBlocks = layoutHtml.trim() ? "true" : "false";
+  layoutBlocksEl.classList.toggle("hidden", !layoutHtml.trim());
 }
 
 function renderStoreTabs() {
