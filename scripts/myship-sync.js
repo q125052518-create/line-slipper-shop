@@ -11,6 +11,8 @@ const shopBaseUrl = cleanBaseUrl(process.env.SHOP_BASE_URL || "https://line-slip
 const adminPassword = String(process.env.ADMIN_PASSWORD || "").trim();
 const productUrl = String(process.env.MYSHIP_PRODUCT_URL || "https://myship.7-11.com.tw/general/detail/GM2506169881759").trim();
 const chromeProfileDir = path.resolve(process.env.MYSHIP_CHROME_PROFILE_DIR || path.join(repoRoot, ".myship-chrome-profile"));
+const myshipCdpUrl = String(process.env.MYSHIP_CDP_URL || process.env.REMOTE_BROWSER_CDP_MYSHIP || "").trim();
+const myshipCdpTimeoutMs = Math.max(5000, Number(process.env.MYSHIP_CDP_TIMEOUT_MS || 15000));
 const syncIntervalMs = Math.max(60000, Number(process.env.SYNC_INTERVAL_MS || 5 * 60 * 1000));
 const defaultTimeoutMs = Math.max(5000, Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000));
 const navTimeoutMs = Math.max(10000, Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000));
@@ -62,15 +64,12 @@ async function runSyncCycle() {
     return;
   }
 
-  const context = await chromium.launchPersistentContext(chromeProfileDir, {
-    channel: browserChannel || undefined,
-    headless,
-    locale: "zh-TW",
-    args: ["--disable-dev-shm-usage"]
-  });
+  const session = await openMyshipBrowserSession();
+  const context = session.context;
+  let page = null;
 
   try {
-    const page = await context.newPage();
+    page = await context.newPage();
     page.setDefaultTimeout(defaultTimeoutMs);
     page.setDefaultNavigationTimeout(navTimeoutMs);
     page.on("dialog", async (dialog) => dialog.accept().catch(() => {}));
@@ -79,8 +78,43 @@ async function runSyncCycle() {
       await processOrder(page, order);
     }
   } finally {
-    await context.close();
+    if (page) await page.close().catch(() => {});
+    await session.close();
   }
+}
+
+async function openMyshipBrowserSession() {
+  if (myshipCdpUrl) {
+    const browser = await chromium.connectOverCDP(myshipCdpUrl, { timeout: myshipCdpTimeoutMs });
+    const context = browser.contexts()[0];
+    if (!context) throw new Error(`MYSHIP_CDP_URL has no browser context: ${myshipCdpUrl}`);
+    return {
+      context,
+      close: async () => {
+        detachSharedCdpBrowser(browser);
+      }
+    };
+  }
+  const context = await chromium.launchPersistentContext(chromeProfileDir, {
+    channel: browserChannel || undefined,
+    headless,
+    locale: "zh-TW",
+    args: ["--disable-dev-shm-usage"]
+  });
+  return {
+    context,
+    close: async () => {
+      await context.close();
+    }
+  };
+}
+
+function detachSharedCdpBrowser(browser) {
+  // CDP is a shared logged-in Chrome; disconnect the Playwright client without closing Chrome.
+  try {
+    browser._shouldCloseConnectionOnClose = true;
+    browser._connection?.close?.();
+  } catch {}
 }
 
 async function processOrder(page, pendingOrder) {

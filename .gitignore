@@ -13,3 +13,6 @@ data/myship-*.png
 logs/
 data/*.backup-*.json
 data/orders.before-*.json
+.run-state/
+.handoff-temp/
+handoff-releases/

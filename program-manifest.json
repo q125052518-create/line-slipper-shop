@@ -1,0 +1,112 @@
+{
+  "schema": "codex-program-manifest/v1",
+  "program_id": "line-slipper-first-station",
+  "canonical_name": "第一站 LINE 拖鞋下單系統 + HAXX 後台入口 + 本機賣貨便同步器",
+  "version": "2026.09.12.1",
+  "status": "formal",
+  "scope": {
+    "included": [
+      "line-slipper-shop",
+      "rt_line_myship_sync",
+      "local-myship-worker"
+    ],
+    "excluded": [
+      "line-slipper-shop-2",
+      "second-station-data",
+      "second-station-auth-state"
+    ]
+  },
+  "source": {
+    "repository_kind": "git-working-tree-snapshot",
+    "branch": "main",
+    "base_commit": "781fa3923c8db270907c56a5c0aea9bff4b3ac5d",
+    "included_uncommitted_paths": [
+      "server.js",
+      "scripts/myship-sync.js"
+    ],
+    "dynamic_evidence_file": "SOURCE-STATE.json"
+  },
+  "components": [
+    {
+      "id": "storefront-and-admin",
+      "runtime": "node",
+      "entry": "server.js"
+    },
+    {
+      "id": "local-myship-worker",
+      "runtime": "node",
+      "entry": "scripts/myship-sync.js"
+    },
+    {
+      "id": "haxx-first-station-entry",
+      "runtime": "python",
+      "entry": "haxx_reference_only/app/line_myship_sync.py",
+      "integration_mode": "reference-only-safe-merge"
+    }
+  ],
+  "entrypoints": {
+    "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup.ps1",
+    "run": "powershell -ExecutionPolicy Bypass -File scripts/run.ps1 -Mode Server",
+    "verify": "powershell -ExecutionPolicy Bypass -File scripts/verify.ps1",
+    "cleanup": "powershell -ExecutionPolicy Bypass -File scripts/cleanup.ps1",
+    "build_handoff": "powershell -ExecutionPolicy Bypass -File scripts/build-handoff.ps1 -HaxxRoot <path> -HaxxToolRoot <path>"
+  },
+  "runtime": {
+    "operating_system": "Windows 10/11",
+    "powershell_minimum": "5.1",
+    "node_minimum": "20.0.0",
+    "node_tested": "24.15.0",
+    "npm_tested": "11.12.1"
+  },
+  "urls": {
+    "storefront": "https://line-slipper-shop.onrender.com/",
+    "render_admin": "https://line-slipper-shop.onrender.com/admin.html",
+    "haxx_admin_proxy": "https://haxx.tail779f0b.ts.net/apps/line-slipper-admin/admin-orders.html",
+    "haxx_tool_open": "https://haxx.tail779f0b.ts.net/tools/rt_line_myship_sync/open",
+    "haxx_maintenance_path": "/tools/rt_line_myship_sync/current-thread-maintenance"
+  },
+  "data_policy": {
+    "included_seed_files": [
+      "data/catalog.json",
+      "data/store-layout.json",
+      "data/mallbic-order-template.xls"
+    ],
+    "forbidden_release_paths": [
+      ".env",
+      ".git",
+      "node_modules",
+      "logs",
+      "data/orders.json",
+      "data/buyers.json",
+      "data/chats.json",
+      "data/mallbic-sync.json",
+      "data/mallbic-order-sync.json",
+      "data/myship-order-sync.json",
+      "data/local-myship-chrome-profile",
+      "data/myship-browser-profile"
+    ]
+  },
+  "side_effect_controls": {
+    "myship_read_only_mode": "MyShipCheck",
+    "myship_order_modes": [
+      "MyShipOnce",
+      "MyShipWorker"
+    ],
+    "required_confirmation_switch": "AllowOrderCreation"
+  },
+  "login_page": {
+    "mode": "current-browser-page-only",
+    "url": "https://myship.7-11.com.tw/myship/list1",
+    "entry": "public/admin-tools.js",
+    "regression_test": "node --test tests/myship-login-window.test.js",
+    "starts_worker": false,
+    "proves_worker_browser_connection": false
+  },
+  "handoff": {
+    "drive_folder_id": "1Ktkeh4nGsRLuNDiiCcGMiOjBb0brZKy7",
+    "index_spreadsheet_id": "1eUKNzyXnhai8IZANdLuSKDS1lX5P-x166woTc8qNzvk",
+    "archive_format": "zip",
+    "integrity_manifest": "FILES.sha256",
+    "release_manifest": "RELEASE-MANIFEST.json"
+  }
+}

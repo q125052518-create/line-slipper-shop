@@ -272,29 +272,22 @@ myshipOrderSyncButtonEl?.addEventListener("click", async () => {
   }
 });
 
-myshipLoginWindowButtonEl?.addEventListener("click", async () => {
-  const confirmed = confirm("要開啟賣貨便登入視窗嗎？開啟後請在跳出的 Chromium 視窗完成 Facebook/賣貨便登入。");
+myshipLoginWindowButtonEl?.addEventListener("click", () => {
+  const confirmed = confirm("要在目前 Chrome 開啟賣貨便登入頁嗎？");
   if (!confirmed) return;
 
-  myshipLoginWindowButtonEl.disabled = true;
-  myshipOrderSyncMessageEl.textContent = "正在開啟賣貨便登入視窗，請在跳出的視窗完成登入...";
-
   try {
-    const response = await fetch("/api/admin/myship/open-login-window", { method: "POST" });
-    const data = await response.json();
-
-    if (!response.ok) {
-      myshipOrderSyncMessageEl.textContent = data.message || "賣貨便登入視窗開啟失敗";
+    const loginWindow = window.open("about:blank", "_blank");
+    if (!loginWindow) {
+      myshipOrderSyncMessageEl.textContent = "瀏覽器未開啟賣貨便登入頁";
       return;
     }
 
-    myshipOrderSyncMessageEl.textContent = data.message || "賣貨便登入視窗已關閉";
-    await loadMyshipOrderSyncStatus();
+    loginWindow.opener = null;
+    loginWindow.location.replace("https://myship.7-11.com.tw/myship/list1");
+    myshipOrderSyncMessageEl.textContent = "賣貨便頁面已開啟；本機同步器連接尚未驗證";
   } catch {
-    myshipOrderSyncMessageEl.textContent = "賣貨便登入視窗開啟失敗，請稍後再試";
-  } finally {
-    myshipLoginWindowButtonEl.disabled = false;
-    await loadMyshipOrderSyncStatus();
+    myshipOrderSyncMessageEl.textContent = "賣貨便登入頁開啟失敗";
   }
 });
 

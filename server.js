@@ -52,7 +52,13 @@ const myshipAutoOrderIntervalMs = Math.max(60000, Number(process.env.MYSHIP_AUTO
 const myshipAmountSource = String(process.env.MYSHIP_AMOUNT_SOURCE || "productTotal").trim();
 const myshipDefaultTimeoutMs = Number(process.env.MYSHIP_DEFAULT_TIMEOUT_MS || 30000);
 const myshipNavTimeoutMs = Number(process.env.MYSHIP_NAV_TIMEOUT_MS || 60000);
-const myshipBrowserProfileDir = String(process.env.MYSHIP_BROWSER_PROFILE_DIR || path.join(dataDir, "myship-browser-profile")).trim();
+const myshipBrowserProfileDir = String(
+  process.env.MYSHIP_BROWSER_PROFILE_DIR
+    || process.env.MYSHIP_CHROME_PROFILE_DIR
+    || path.join(dataDir, "myship-browser-profile")
+).trim();
+const myshipCdpUrl = String(process.env.MYSHIP_CDP_URL || process.env.REMOTE_BROWSER_CDP_MYSHIP || "").trim();
+const myshipCdpTimeoutMs = Math.max(5000, Number(process.env.MYSHIP_CDP_TIMEOUT_MS || 15000));
 const myshipHeadless = parseEnvFlag(process.env.MYSHIP_HEADLESS, true);
 const myshipManualLoginWindowMs = Math.max(60000, Number(process.env.MYSHIP_MANUAL_LOGIN_WINDOW_MS || 3 * 60 * 1000));
 const myshipClaimTimeoutMs = Math.max(60000, Number(process.env.MYSHIP_CLAIM_TIMEOUT_MS || 30 * 60 * 1000));
@@ -2335,12 +2341,39 @@ async function launchChromiumBrowser() {
 async function launchMyshipContext() {
   const { chromium } = await import("playwright");
   await ensureChromiumBrowserInstalled(chromium);
+  if (myshipCdpUrl) {
+    const browser = await chromium.connectOverCDP(myshipCdpUrl, { timeout: myshipCdpTimeoutMs });
+    const context = browser.contexts()[0];
+    if (!context) throw new Error(`MYSHIP_CDP_URL has no browser context: ${myshipCdpUrl}`);
+    return {
+      context,
+      shared: true,
+      close: async () => {
+        detachSharedCdpBrowser(browser);
+      }
+    };
+  }
   await fs.mkdir(myshipBrowserProfileDir, { recursive: true });
-  return chromium.launchPersistentContext(myshipBrowserProfileDir, {
+  const context = await chromium.launchPersistentContext(myshipBrowserProfileDir, {
     headless: myshipHeadless,
     locale: "zh-TW",
     args: ["--no-sandbox", "--disable-dev-shm-usage"]
   });
+  return {
+    context,
+    shared: false,
+    close: async () => {
+      await context.close();
+    }
+  };
+}
+
+function detachSharedCdpBrowser(browser) {
+  // CDP is a shared logged-in Chrome; disconnect the Playwright client without closing Chrome.
+  try {
+    browser._shouldCloseConnectionOnClose = true;
+    browser._connection?.close?.();
+  } catch {}
 }
 
 async function ensureChromiumBrowserInstalled(chromium) {
@@ -2383,13 +2416,17 @@ async function ensureChromiumBrowserInstalled(chromium) {
 }
 
 async function withMyshipPage(task) {
-  const context = await launchMyshipContext();
+  const session = await launchMyshipContext();
+  const context = session.context;
+  let page = null;
 
   try {
-    const page = await context.newPage();
-    for (const existingPage of context.pages()) {
-      if (existingPage === page) continue;
-      await existingPage.close().catch(() => {});
+    page = await context.newPage();
+    if (!session.shared) {
+      for (const existingPage of context.pages()) {
+        if (existingPage === page) continue;
+        await existingPage.close().catch(() => {});
+      }
     }
     page.setDefaultTimeout(myshipDefaultTimeoutMs);
     page.setDefaultNavigationTimeout(myshipNavTimeoutMs);
@@ -2398,7 +2435,8 @@ async function withMyshipPage(task) {
     });
     return await task(page);
   } finally {
-    await context.close();
+    if (page) await page.close().catch(() => {});
+    await session.close();
   }
 }
 
@@ -2407,12 +2445,16 @@ async function openMyshipLoginWindow() {
     throw new Error("MYSHIP_HEADLESS 目前是 true，無法開啟可手動登入的賣貨便視窗");
   }
 
-  const context = await launchMyshipContext();
+  const session = await launchMyshipContext();
+  const context = session.context;
+  let page = null;
   try {
-    const page = await context.newPage();
-    for (const existingPage of context.pages()) {
-      if (existingPage === page) continue;
-      await existingPage.close().catch(() => {});
+    page = await context.newPage();
+    if (!session.shared) {
+      for (const existingPage of context.pages()) {
+        if (existingPage === page) continue;
+        await existingPage.close().catch(() => {});
+      }
     }
     page.setDefaultTimeout(myshipDefaultTimeoutMs);
     page.setDefaultNavigationTimeout(myshipNavTimeoutMs);
@@ -2443,7 +2485,8 @@ async function openMyshipLoginWindow() {
         : "登入狀態尚未確認，請確認視窗內是否已完成 Facebook/賣貨便登入"
     };
   } finally {
-    await context.close();
+    if (page) await page.close().catch(() => {});
+    await session.close();
   }
 }
 
