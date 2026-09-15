@@ -9,6 +9,7 @@ data/orders.json
 data/myship-order-sync.json
 data/myship-browser-profile/
 data/local-myship-chrome-profile/
+data/local-myship-store-alias.json
 data/myship-*.png
 logs/
 data/*.backup-*.json

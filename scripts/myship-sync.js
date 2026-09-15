@@ -1,7 +1,9 @@
 import "dotenv/config";
+import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { chromium } from "playwright";
+import { normalizeTaiwanMobile } from "./myship-phone.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,12 +26,21 @@ const browserChannel = String(process.env.MYSHIP_BROWSER_CHANNEL || "chrome").tr
 
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has("--check");
+const diagnoseStore = args.has("--diagnose-store");
+const discoverNearbyStore = args.has("--discover-nearby-store");
+const diagnoseStoreSourceOrderId = process.argv.slice(2)
+  .find((arg) => arg.startsWith("--diagnose-store-source="))
+  ?.slice("--diagnose-store-source=".length) || "";
 const runOnce = args.has("--once") || checkOnly;
+const nearbyStoreOutputPath = path.join(repoRoot, "data", "local-myship-store-alias.json");
 
 let cookieHeader = "";
 
-main().catch((error) => {
+main().then(() => {
+  if (runOnce) process.exit(0);
+}).catch((error) => {
   console.error(`[myship-sync] fatal: ${error.message}`);
+  if (runOnce) process.exit(1);
   process.exitCode = 1;
 });
 
@@ -52,6 +63,9 @@ async function main() {
 }
 
 async function runSyncCycle() {
+  if (discoverNearbyStore && !diagnoseStore) {
+    throw new Error("--discover-nearby-store requires --diagnose-store");
+  }
   await loginAdmin();
   const pending = await getPendingOrders();
   if (!pending.orders.length) {
@@ -62,6 +76,15 @@ async function runSyncCycle() {
   if (dryRun) {
     console.log(`[myship-sync] dry run. Would create ${pending.orders.length} orders.`);
     return;
+  }
+
+  let diagnosticStore = null;
+  if (diagnoseStoreSourceOrderId) {
+    if (!diagnoseStore) throw new Error("--diagnose-store-source requires --diagnose-store");
+    const orderPayload = await apiFetch("/api/orders");
+    const sourceOrder = orderPayload.orders?.find((order) => order.id === diagnoseStoreSourceOrderId);
+    if (!sourceOrder?.sevenElevenStore) throw new Error("Diagnostic source order has no 7-11 store");
+    diagnosticStore = sourceOrder.sevenElevenStore;
   }
 
   const session = await openMyshipBrowserSession();
@@ -75,7 +98,7 @@ async function runSyncCycle() {
     page.on("dialog", async (dialog) => dialog.accept().catch(() => {}));
 
     for (const order of pending.orders) {
-      await processOrder(page, order);
+      await processOrder(page, order, diagnosticStore);
     }
   } finally {
     if (page) await page.close().catch(() => {});
@@ -117,7 +140,7 @@ function detachSharedCdpBrowser(browser) {
   } catch {}
 }
 
-async function processOrder(page, pendingOrder) {
+async function processOrder(page, pendingOrder, diagnosticStore = null) {
   const orderId = pendingOrder.id;
   let claimedOrder = pendingOrder;
 
@@ -127,6 +150,7 @@ async function processOrder(page, pendingOrder) {
       body: { productUrl }
     });
     claimedOrder = claim.order;
+    if (diagnosticStore) claimedOrder = { ...claimedOrder, sevenElevenStore: diagnosticStore };
   } catch (error) {
     console.warn(`[myship-sync] skip ${orderId}: ${error.message}`);
     return;
@@ -182,7 +206,18 @@ async function createMyshipOrder(page, order) {
   if (!enteredCart) throw new Error("Could not enter MyShip checkout page");
 
   await confirmCartAmount(page, quantity);
-  await fillCheckoutData(page, order);
+  const checkoutData = await fillCheckoutData(page, order);
+  if (diagnoseStore) {
+    const currentUrl = new URL(page.url());
+    throw new Error(`STORE_SELECTION_DIAGNOSTIC ${JSON.stringify({
+      namePresent: Boolean(checkoutData.name),
+      phonePresent: Boolean(checkoutData.phone),
+      storeIdPresent: Boolean(checkoutData.storeId),
+      storeNamePresent: Boolean(checkoutData.storeName),
+      storeAddressPresent: Boolean(checkoutData.storeAddress),
+      url: `${currentUrl.origin}${currentUrl.pathname}`
+    })}`);
+  }
   await submitMyshipOrder(page);
 
   const text = await bodyText(page);
@@ -353,7 +388,7 @@ async function confirmCartAmount(page, quantity) {
 async function fillCheckoutData(page, order) {
   const store = order.sevenElevenStore || {};
   const name = String(order.customerName || "").trim().slice(0, 10);
-  const phone = normalizePhone(order.phone || "");
+  const phone = normalizeTaiwanMobile(order.phone || "");
   const storeId = String(store.id || "").trim();
 
   if (!name) throw new Error("Missing recipient name for MyShip checkout");
@@ -362,7 +397,7 @@ async function fillCheckoutData(page, order) {
 
   await fillVisibleField(page, "#RcvName, input[name='RcvName']", name);
   await fillVisibleField(page, "#RcvMobile, input[name='RcvMobile']", phone);
-  await selectMyshipPickupStore(page, storeId);
+  const selectedStoreId = await selectMyshipPickupStore(page, storeId);
   await fillVisibleField(page, "#RcvName, input[name='RcvName']", name);
   await fillVisibleField(page, "#RcvMobile, input[name='RcvMobile']", phone);
 
@@ -378,6 +413,10 @@ async function fillCheckoutData(page, order) {
   if (!result.storeId || !result.storeName || !result.storeAddress) {
     throw new Error("Could not select MyShip 7-11 pickup store");
   }
+  if (!sameStoreId(result.storeId, selectedStoreId)) {
+    throw new Error("MyShip returned a different 7-11 pickup store id");
+  }
+  return result;
 }
 
 async function fillVisibleField(page, selector, value) {
@@ -392,6 +431,7 @@ async function fillVisibleField(page, selector, value) {
 }
 
 async function selectMyshipPickupStore(page, storeId) {
+  let selectedStoreId = storeId;
   await page.evaluate(() => {
     if (typeof window.jsEmap === "function") window.jsEmap();
   });
@@ -410,18 +450,98 @@ async function selectMyshipPickupStore(page, storeId) {
   await frame.locator("#inputKey").fill(storeId);
   await frame.locator("#send").click({ force: true });
   await waitForFrameFunction(frame, (id) => {
-    return [...document.querySelectorAll("li")].some((entry) => String(entry.getAttribute("onclick") || "").includes(id));
+    const actions = [...document.querySelectorAll("li")].map((entry) => String(entry.getAttribute("onclick") || ""));
+    return actions.some((onclick) => {
+      const match = onclick.match(/(?:GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+      return match?.[1] === id;
+    }) || /查無符合條件|無法提供該網站/.test(document.body?.innerText || "");
   }, storeId, "7-11 store id search result");
-  await frame.evaluate((id) => {
-    if (typeof window.GoMap === "function") {
-      window.GoMap(id);
-      return;
+  const resultItems = frame.locator("li");
+  const resultMatch = await resultItems.evaluateAll((entries, id) => {
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
+      const onclick = String(entry.getAttribute("onclick") || "");
+      const match = onclick.match(/(GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+      if (match?.[2] !== id) continue;
+      return {
+        index,
+        action: match[1],
+        className: entry.className || "",
+        disabled: entry.hasAttribute("disabled") || entry.getAttribute("aria-disabled") === "true"
+      };
     }
-    const entry = [...document.querySelectorAll("li")].find((item) => String(item.getAttribute("onclick") || "").includes(id));
-    entry?.click();
+    return null;
   }, storeId);
+  const searchDiagnostic = await resultItems.evaluateAll((entries, id) => {
+    return entries
+      .map((entry) => {
+        const onclick = String(entry.getAttribute("onclick") || "");
+        const match = onclick.match(/(GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+        if (!match) return null;
+        const argument = match[2];
+        return {
+          action: match[1],
+          className: entry.className || "",
+          argumentLength: argument.length,
+          inputLength: id.length,
+          trimmedMatch: argument.trim() === id.trim(),
+          numericMatch: /^\d+$/.test(argument) && /^\d+$/.test(id) && Number(argument) === Number(id)
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 10);
+  }, storeId);
+  let mapActionAlreadyInvoked = false;
+  let mapInvocation = null;
+  if (!resultMatch) {
+    const alias = readNearbyStoreAlias(storeId);
+    if (!alias) {
+      throw new Error(`7-11 pickup store search did not return the exact store id. ${JSON.stringify(searchDiagnostic)}`);
+    }
+    await frame.goto(frame.url(), { waitUntil: "domcontentloaded", timeout: 30000 });
+    await frame.locator("#inputKey").waitFor({ state: "visible", timeout: defaultTimeoutMs });
+    await frame.locator("#inputKey").fill(alias.sourceStoreId);
+    await frame.locator("#send").click({ force: true });
+    await waitForFrameFunction(frame, (id) => {
+      return [...document.querySelectorAll("li")].some((entry) => {
+        const onclick = String(entry.getAttribute("onclick") || "");
+        const match = onclick.match(/(?:GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+        return match?.[1] === id;
+      });
+    }, alias.sourceStoreId, "7-11 nearby-store source search result");
+    const currentCandidates = await fetchNearbyStores(frame, alias.sourceStoreId);
+    const verifiedCandidate = currentCandidates.find((candidate) => sameStoreId(candidate.id, storeId));
+    if (!verifiedCandidate) {
+      throw new Error("The saved 7-11 nearby-store alias is no longer valid in official eMap");
+    }
+    await loadOfficialNearbyStoreUi(frame, alias.sourceStoreId, storeId);
+    mapInvocation = await invokeOfficialStoreMap(frame, storeId);
+    mapActionAlreadyInvoked = true;
+  }
+  if (resultMatch && (resultMatch.action !== "GoMap" || resultMatch.className.split(/\s+/).includes("useless") || resultMatch.disabled)) {
+    if (!discoverNearbyStore) throw new Error("7-11 pickup store is currently unavailable");
 
-  frame = await waitForActionFrame(page, /Map\/Default\.aspx|mobilemap\/map\.aspx/i, "SendInfo", "7-11 map SendInfo");
+    const nearbyStore = (await fetchNearbyStores(frame, storeId))[0] || null;
+    if (!nearbyStore) throw new Error("7-11 did not return a complete nearby available store");
+
+    await loadOfficialNearbyStoreUi(frame, storeId, nearbyStore.id);
+    writeNearbyStore(nearbyStore, storeId);
+    selectedStoreId = nearbyStore.id;
+    mapInvocation = await invokeOfficialStoreMap(frame, nearbyStore.id);
+    mapActionAlreadyInvoked = true;
+  }
+  if (!mapActionAlreadyInvoked) {
+    mapInvocation = await invokeOfficialStoreMap(frame, storeId);
+  }
+
+  try {
+    frame = await waitForActionFrame(page, /Map\/Default\.aspx|mobilemap\/map\.aspx/i, "SendInfo", "7-11 map SendInfo");
+  } catch (error) {
+    const diagnostic = diagnoseStore
+      ? await describeStoreMapState(frame, selectedStoreId, mapInvocation).catch(() => null)
+      : null;
+    throw new Error(`${error.message}${diagnostic ? ` Map state: ${JSON.stringify(diagnostic)}` : ""}`);
+  }
   await clickFrameControl(frame, [
     "img[onclick*='SendInfo']",
     "#OK img",
@@ -446,6 +566,149 @@ async function selectMyshipPickupStore(page, storeId) {
     page.locator("#RcvStoreID, input[name='RcvStoreID']").first().waitFor({ timeout: 30000 }).catch(() => null)
   ]);
   await dismissDialogs(page);
+  return selectedStoreId;
+}
+
+async function invokeOfficialStoreMap(frame, storeId) {
+  const items = frame.locator("li");
+  const match = await items.evaluateAll((entries, id) => {
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
+      const onclick = String(entry.getAttribute("onclick") || "");
+      const action = onclick.match(/(GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+      if (action?.[2] !== id) continue;
+      return {
+        index,
+        action: action[1],
+        className: entry.className || "",
+        disabled: entry.hasAttribute("disabled") || entry.getAttribute("aria-disabled") === "true"
+      };
+    }
+    return null;
+  }, storeId);
+  if (match?.action === "GoMap" && !match.className.split(/\s+/).includes("useless") && !match.disabled) {
+    const onclick = await items.nth(match.index).getAttribute("onclick");
+    await frame.evaluate((id) => {
+      if (typeof window.GoMap !== "function") throw new Error("GoMap is unavailable");
+      window.GoMap(id);
+    }, storeId);
+    return { method: "validated-go-map", onclick: String(onclick || "") };
+  }
+  throw new Error("Official 7-11 nearby-store result was not selectable");
+}
+
+async function describeStoreMapState(frame, storeId, invocation) {
+  return frame.evaluate(({ id, invocationData }) => {
+    const serializedStoreData = JSON.stringify(top.StoreDatas || []);
+    return {
+      invocation: invocationData,
+      frameUrl: location.href,
+      topUrl: top.location.href,
+      mobileMapType: typeof top.MobileMap,
+      mobileMapSource: typeof top.MobileMap === "function" ? String(top.MobileMap).slice(0, 600) : "",
+      mapSubmitType: typeof top.Map_submit,
+      mapSubmitSource: typeof top.Map_submit === "function" ? String(top.Map_submit).slice(0, 1000) : "",
+      hiddenSource: top.document.querySelector("#hiddenSource")?.value || "",
+      hiddenStoreId: top.document.querySelector("#hiddenStoreId")?.value || "",
+      hiddenStoreCategory: top.document.querySelector("#hiddenStoreCategory")?.value || "",
+      mapForm: (() => {
+        const form = top.document.querySelector("form");
+        return form ? { action: form.action, method: form.method, target: form.target } : null;
+      })(),
+      storeDatasType: Array.isArray(top.StoreDatas) ? "array" : typeof top.StoreDatas,
+      storeDatasLength: Array.isArray(top.StoreDatas) ? top.StoreDatas.length : 0,
+      targetInStoreDatas: serializedStoreData.includes(String(id)),
+      targetResultPresent: [...document.querySelectorAll("li")].some((entry) => {
+        const onclick = String(entry.getAttribute("onclick") || "");
+        const match = onclick.match(/GoMap\(\s*['\"]?([^'\",)]+)/);
+        return match?.[1] === id;
+      })
+    };
+  }, { id: storeId, invocationData: invocation });
+}
+
+async function loadOfficialNearbyStoreUi(frame, sourceStoreId, targetStoreId) {
+  const source = await frame.locator("li").evaluateAll((entries, id) => {
+    for (const entry of entries) {
+      const onclick = String(entry.getAttribute("onclick") || "");
+      const match = onclick.match(/(GoMap|ShowDisableMsg)\(\s*['\"]?([^'\",)]+)/);
+      if (match?.[2] !== id) continue;
+      return {
+        action: match[1],
+        name: String(entry.querySelector("strong")?.textContent || "").replace(/門市\s*$/, "").trim()
+      };
+    }
+    return null;
+  }, sourceStoreId);
+  if (!source || source.action !== "ShowDisableMsg") {
+    throw new Error("The 7-11 nearby-store source is no longer an unavailable store result");
+  }
+  await frame.evaluate(({ id, name }) => {
+    if (typeof window.ShowDisableMsg !== "function") throw new Error("ShowDisableMsg is unavailable");
+    window.ShowDisableMsg(id, name);
+  }, { id: sourceStoreId, name: source.name });
+  await waitForFrameFunction(frame, (id) => {
+    return [...document.querySelectorAll("li")].some((entry) => {
+      const onclick = String(entry.getAttribute("onclick") || "");
+      const match = onclick.match(/GoMap\(\s*['\"]?([^'\",)]+)/);
+      return match?.[1] === id;
+    });
+  }, targetStoreId, "official 7-11 nearby-store result");
+}
+
+async function fetchNearbyStores(frame, sourceStoreId) {
+  return frame.evaluate(async (id) => {
+    const body = new URLSearchParams({
+      mode: "getnearstore",
+      storeid: id,
+      cate: String(top.GetCate?.() || ""),
+      eshopparid: String(top.eshopparid || ""),
+      eshopid: String(top.eshopid || "")
+    });
+    const response = await fetch("Data.aspx", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    if (!response.ok) return [];
+    const rows = (await response.text()).split(";");
+    if (rows.shift() !== "OK") return [];
+    return rows
+      .map((row) => row.split("+"))
+      .filter((fields) => fields.length >= 4 && fields[0] && fields[1] && fields[2] && fields[3] !== "disable")
+      .map((fields) => ({ id: fields[0], name: fields[1], address: fields[2] }));
+  }, sourceStoreId);
+}
+
+function readNearbyStoreAlias(targetStoreId) {
+  if (!fs.existsSync(nearbyStoreOutputPath)) return null;
+  const payload = JSON.parse(fs.readFileSync(nearbyStoreOutputPath, "utf8"));
+  if (payload.schema !== "line-first-myship-store-alias/v1") {
+    throw new Error("Local MyShip store alias schema is invalid");
+  }
+  if (!payload.sourceStoreId || !payload.store?.id || !payload.store?.name || !payload.store?.address) {
+    throw new Error("Local MyShip store alias is incomplete");
+  }
+  if (!sameStoreId(payload.store.id, targetStoreId)) return null;
+  return payload;
+}
+
+function writeNearbyStore(store, sourceStoreId) {
+  fs.mkdirSync(path.dirname(nearbyStoreOutputPath), { recursive: true });
+  const temporaryPath = `${nearbyStoreOutputPath}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify({
+    schema: "line-first-myship-store-alias/v1",
+    discoveredAt: new Date().toISOString(),
+    source: "7-11 official eMap nearest available recommendation",
+    sourceStoreId,
+    store
+  }, null, 2), "utf8");
+  fs.renameSync(temporaryPath, nearbyStoreOutputPath);
+}
+
+function sameStoreId(actual, expected) {
+  const normalize = (value) => String(value || "").replace(/\s+/g, "").toUpperCase();
+  return normalize(actual) === normalize(expected);
 }
 
 async function waitForFrame(page, pattern, timeoutMs) {
@@ -612,10 +875,6 @@ async function setInputValue(page, locator, value) {
 function getMyshipQuantity(order) {
   const value = Number(order?.myshipQuantity || order?.productTotal || order?.totalAmount || 0);
   return Math.max(1, Math.round(Number.isFinite(value) ? value : 0));
-}
-
-function normalizePhone(value) {
-  return String(value || "").replace(/\D+/g, "").slice(0, 10);
 }
 
 function extractMyshipOrderNo(text) {

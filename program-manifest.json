@@ -2,7 +2,7 @@
   "schema": "codex-program-manifest/v1",
   "program_id": "line-slipper-first-station",
   "canonical_name": "第一站 LINE 拖鞋下單系統 + HAXX 後台入口 + 本機賣貨便同步器",
-  "version": "2026.09.12.1",
+  "version": "2026.09.15.1",
   "status": "formal",
   "scope": {
     "included": [
@@ -19,10 +19,17 @@
   "source": {
     "repository_kind": "git-working-tree-snapshot",
     "branch": "main",
-    "base_commit": "781fa3923c8db270907c56a5c0aea9bff4b3ac5d",
+    "base_commit": "adc72833979ee883ba3c29da391d99dd996ab640",
     "included_uncommitted_paths": [
-      "server.js",
-      "scripts/myship-sync.js"
+      ".gitignore",
+      "PROGRAM.md",
+      "known-errors.jsonl",
+      "program-manifest.json",
+      "run-history.jsonl",
+      "scripts/myship-sync.js",
+      "scripts/myship-phone.js",
+      "scripts/verify.ps1",
+      "tests/myship-phone.test.js"
     ],
     "dynamic_evidence_file": "SOURCE-STATE.json"
   },
@@ -82,6 +89,7 @@
       "data/mallbic-sync.json",
       "data/mallbic-order-sync.json",
       "data/myship-order-sync.json",
+      "data/local-myship-store-alias.json",
       "data/local-myship-chrome-profile",
       "data/myship-browser-profile"
     ]
@@ -98,7 +106,7 @@
     "mode": "current-browser-page-only",
     "url": "https://myship.7-11.com.tw/myship/list1",
     "entry": "public/admin-tools.js",
-    "regression_test": "node --test tests/myship-login-window.test.js",
+    "regression_test": "node --test tests/myship-login-window.test.js tests/myship-phone.test.js",
     "starts_worker": false,
     "proves_worker_browser_connection": false
   },

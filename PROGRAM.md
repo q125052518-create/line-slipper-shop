@@ -1,10 +1,16 @@
 # 第一站 LINE 拖鞋下單系統
 
+## 賣貨便端到端修正（2026-09-15）
+
+- 本機 worker 會把台灣手機的 `+886` 格式正規化為 `09` 開頭，再填入賣貨便收件欄位。
+- 7-ELEVEN 電子地圖只接受店號完全相符且可用的官方 `GoMap` 結果；停用門市不會被誤點。若訂單使用官方推薦的鄰近門市，worker 會用本機 `data/local-myship-store-alias.json` 重新查詢來源門市、驗證推薦仍有效，再走官方推薦流程。該檔不進 Git 或交接包。
+- 第一站回歸：`node --test tests/myship-login-window.test.js tests/myship-phone.test.js`。2026-09-15 已用一筆受控訂單完成正式 MyShip 建單與雲端 result 讀回；實際建單仍必須由使用者明確授權 `-AllowOrderCreation`。
+
 ## 登入入口修正（2026-09-12）
 
 - 後台登入按鈕只在使用者目前的 Chrome 開啟官方 `myship/list1` 頁面，保留彈出視窗被阻擋與導航失敗的明確狀態；不呼叫建單 API、不啟動本機 worker，也不複製登入資料。
 - HAXX 正式 `app/line_shop_admin.py` 的 `POST admin/myship/open-login-window` 只回傳官方登入網址與 `localWorkerStarted=false`；不得把登入請求轉成 `start_line_myship_worker`，也不得轉送到 Render 的伺服器端瀏覽器啟動器。
-- 第一站回歸：`node --test tests/myship-login-window.test.js`；HAXX 回歸：`.venv/Scripts/python.exe -B -m unittest discover -s tests -p test_line_myship_login_safety.py`。前者已整合到正式 `scripts/verify.ps1`。
+- 第一站回歸：`node --test tests/myship-login-window.test.js tests/myship-phone.test.js`；HAXX 回歸：`.venv/Scripts/python.exe -B -m unittest discover -s tests -p test_line_myship_login_safety.py`。前者已整合到正式 `scripts/verify.ps1`。
 - 目前 Chrome 分頁已登入不等於背景 worker 可使用。原 worker 仍只支援經授權的專用 CDP 或 Profile；瀏覽器擴充工具分頁沒有已驗證的背景 worker 連接器。沒有正式連接與有效 GM 賣場網址時不得標記自動建單就緒。
 - 上述修改必須另行部署並讀回 Render 靜態檔及 HAXX 已載入版本，才能稱為正式網站入口修復；本機來源／離線回歸通過不代表已部署或完成真實下單驗收。
 
@@ -63,6 +69,7 @@ HAXX FastAPI
 
 本機 MyShip worker
   |- scripts/myship-sync.js
+  |- scripts/myship-phone.js
   |- 第一站 pending/claim/result API
   `- 使用該機專屬 Chrome Profile 或明確配置的 CDP Chrome
 ```
@@ -73,6 +80,7 @@ HAXX FastAPI
 |---|---|---|
 | `server.js` | 第一站 Node/Express 主程式 | 是，保存目前工作樹版本 |
 | `scripts/myship-sync.js` | 本機賣貨便 worker | 是，保存目前工作樹版本 |
+| `scripts/myship-phone.js` | 台灣手機格式正規化 | 是 |
 | `public/` | 前台、購物車、登入、聊聊及後台頁面 | 是 |
 | `data/catalog.json` | 商品、分類、款式與庫存種子資料 | 是 |
 | `data/store-layout.json` | 首頁版面設定 | 是 |
@@ -81,6 +89,7 @@ HAXX FastAPI
 | `.env` | 本機與服務秘密 | 否，永久禁止 |
 | `data/orders.json`、`buyers.json`、`chats.json` | 客戶與交易資料 | 否 |
 | `data/*sync*.json` | 執行狀態與防重資料 | 否 |
+| `data/local-myship-store-alias.json` | 本機官方推薦門市對照；每次使用時仍需向官方地圖重驗 | 否 |
 | `data/*chrome-profile*/` | 登入 Profile、Cookie、Session | 否 |
 | `logs/`、`node_modules/`、`.git/` | 執行產物、依賴、版本庫內部資料 | 否 |
 
