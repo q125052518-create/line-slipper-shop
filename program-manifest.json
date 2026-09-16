@@ -2,7 +2,7 @@
   "schema": "codex-program-manifest/v1",
   "program_id": "line-slipper-first-station",
   "canonical_name": "第一站 LINE 拖鞋下單系統 + HAXX 後台入口 + 本機賣貨便同步器",
-  "version": "2026.09.15.1",
+  "version": "2026.09.16.0",
   "status": "formal",
   "scope": {
     "included": [
@@ -102,11 +102,21 @@
     ],
     "required_confirmation_switch": "AllowOrderCreation"
   },
+  "storefront_checkout": {
+    "requires_buyer_login": false,
+    "required_customer_fields": [
+      "customerName",
+      "phone",
+      "deliveryMethod"
+    ],
+    "guest_order_access": "exact-order-id-and-normalized-checkout-phone",
+    "regression_test": "node --test tests/guest-checkout.test.js"
+  },
   "login_page": {
     "mode": "current-browser-page-only",
     "url": "https://myship.7-11.com.tw/myship/list1",
     "entry": "public/admin-tools.js",
-    "regression_test": "node --test tests/myship-login-window.test.js tests/myship-phone.test.js",
+    "regression_test": "node --test tests/guest-checkout.test.js tests/myship-login-window.test.js tests/myship-phone.test.js",
     "starts_worker": false,
     "proves_worker_browser_connection": false
   },

@@ -3,68 +3,43 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>我的訂單</title>
+    <title>訂單查詢</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body class="orders-page">
     <header class="app-header">
       <div>
         <p class="eyebrow">Orders</p>
-        <h1>我的訂單</h1>
+        <h1>訂單查詢</h1>
       </div>
       <nav class="header-actions">
         <a class="cart-link" href="/">繼續購物</a>
         <a class="cart-link" href="/cart.html">購物車</a>
-        <a class="cart-link hidden" data-buyer-chat href="/chat.html">聊聊</a>
-        <button id="buyerLogoutButton" class="hidden" data-buyer-logout type="button">登出</button>
       </nav>
     </header>
 
     <main class="orders-layout">
-      <section id="buyerAuthPanel" class="checkout order-lookup-panel">
-        <div class="auth-tabs">
-          <button type="button" class="is-selected" data-auth-mode="login">登入</button>
-          <button type="button" data-auth-mode="register">註冊</button>
-        </div>
-
-        <form id="buyerLoginForm" class="order-form">
-          <h2>買家登入</h2>
+      <section class="checkout order-lookup-panel">
+        <form id="orderLookupForm" class="order-form">
+          <h2>查詢資料</h2>
           <label>
-            帳號或手機號碼
-            <input name="phone" autocomplete="username" required>
+            訂單編號
+            <input name="orderId" autocomplete="off" maxlength="100" required>
           </label>
           <label>
-            密碼
-            <input name="password" type="password" autocomplete="current-password" required>
+            結帳手機
+            <input name="phone" inputmode="tel" autocomplete="tel" maxlength="30" required>
           </label>
-          <button type="submit">登入</button>
+          <button type="submit">查詢訂單</button>
+          <p id="lookupMessage" class="message"></p>
         </form>
-
-        <form id="buyerRegisterForm" class="order-form hidden">
-          <h2>建立帳號</h2>
-          <label>
-            姓名
-            <input name="name" autocomplete="name" required>
-          </label>
-          <label>
-            手機號碼
-            <input name="phone" autocomplete="tel" required>
-          </label>
-          <label>
-            密碼
-            <input name="password" type="password" autocomplete="new-password" minlength="6" required>
-          </label>
-          <button type="submit">註冊並登入</button>
-        </form>
-
-        <p id="authMessage" class="message"></p>
       </section>
 
       <section class="catalog-panel">
         <div class="section-head">
           <div>
             <h2>訂單紀錄</h2>
-            <p id="buyerSummary" class="muted">請先登入買家帳號。</p>
+            <p id="orderSummary" class="muted">輸入訂單編號與結帳手機查詢。</p>
           </div>
           <button id="refreshOrdersButton" class="hidden" type="button">重新整理</button>
         </div>
@@ -72,7 +47,6 @@
       </section>
     </main>
 
-    <script src="/header.js"></script>
     <script src="/orders.js"></script>
   </body>
 </html>

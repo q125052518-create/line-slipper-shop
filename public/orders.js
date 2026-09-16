@@ -1,15 +1,13 @@
 const LAST_PHONE_KEY = "line-slipper-order-phone";
+const LAST_ORDER_ID_KEY = "line-slipper-last-order-id";
 
-const authPanelEl = document.querySelector("#buyerAuthPanel");
-const loginFormEl = document.querySelector("#buyerLoginForm");
-const registerFormEl = document.querySelector("#buyerRegisterForm");
-const authMessageEl = document.querySelector("#authMessage");
-const logoutButtonEl = document.querySelector("#buyerLogoutButton");
+const lookupFormEl = document.querySelector("#orderLookupForm");
+const lookupMessageEl = document.querySelector("#lookupMessage");
 const refreshOrdersButtonEl = document.querySelector("#refreshOrdersButton");
-const buyerSummaryEl = document.querySelector("#buyerSummary");
+const orderSummaryEl = document.querySelector("#orderSummary");
 const ordersEl = document.querySelector("#orders");
 
-let currentBuyer = null;
+let currentLookup = null;
 
 const statusLabels = {
   pending: "新訂單",
@@ -52,27 +50,6 @@ function placeholderImage(name) {
   return `https://placehold.co/160x160/f2efe8/1e2720?text=${encodeURIComponent(name || "Item")}`;
 }
 
-function setAuthMode(mode) {
-  const isLogin = mode === "login";
-  loginFormEl.classList.toggle("hidden", !isLogin);
-  registerFormEl.classList.toggle("hidden", isLogin);
-  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
-    button.classList.toggle("is-selected", button.dataset.authMode === mode);
-  });
-  authMessageEl.textContent = "";
-}
-
-function renderAuthState() {
-  const loggedIn = Boolean(currentBuyer);
-  document.body.classList.toggle("buyer-logged-in", loggedIn);
-  authPanelEl.classList.toggle("hidden", loggedIn);
-  logoutButtonEl.classList.toggle("hidden", !loggedIn);
-  refreshOrdersButtonEl.classList.toggle("hidden", !loggedIn);
-  buyerSummaryEl.textContent = loggedIn
-    ? `${currentBuyer.name || "買家"}，以下是你的訂單紀錄。`
-    : "請先登入買家帳號。";
-}
-
 function renderCancelRequest(order) {
   const request = order.cancelRequest || {};
   if (!request.status) return "";
@@ -97,13 +74,8 @@ function renderOrderAction(order) {
 }
 
 function renderOrders(orders) {
-  if (!currentBuyer) {
-    ordersEl.innerHTML = '<p class="empty">登入後會自動顯示你的訂單。</p>';
-    return;
-  }
-
   if (!orders.length) {
-    ordersEl.innerHTML = '<p class="empty">目前沒有訂單紀錄。</p>';
+    ordersEl.innerHTML = '<p class="empty">尚未查詢到訂單。</p>';
     return;
   }
 
@@ -160,98 +132,86 @@ function renderOrders(orders) {
   `).join("");
 }
 
-async function loadBuyerStatus() {
-  const response = await fetch("/api/buyer/status");
-  const data = await response.json();
-  currentBuyer = data.authenticated ? data.buyer : null;
-  renderAuthState();
-
-  if (currentBuyer) {
-    localStorage.setItem(LAST_PHONE_KEY, currentBuyer.phone || "");
-    await loadOrders();
-  } else {
-    renderOrders([]);
-  }
+function lookupValues() {
+  const formData = new FormData(lookupFormEl);
+  return {
+    orderId: String(formData.get("orderId") || "").trim(),
+    phone: String(formData.get("phone") || "").trim()
+  };
 }
 
 async function loadOrders() {
-  if (!currentBuyer) return;
-
-  ordersEl.innerHTML = '<p class="empty">讀取訂單中...</p>';
-  const response = await fetch("/api/buyer/orders");
-  const data = await response.json();
-
-  if (!response.ok) {
-    ordersEl.innerHTML = `<p class="empty">${escapeHtml(data.message || "訂單讀取失敗")}</p>`;
-    return;
+  const lookup = lookupValues();
+  if (!lookup.orderId || !lookup.phone) {
+    lookupMessageEl.textContent = "請輸入訂單編號與結帳手機";
+    return false;
   }
 
-  renderOrders(data.orders || []);
-}
-
-async function submitAuthForm(form, endpoint) {
-  authMessageEl.textContent = "處理中...";
-  const formData = new FormData(form);
-  const response = await fetch(endpoint, {
+  lookupMessageEl.textContent = "查詢中...";
+  ordersEl.innerHTML = '<p class="empty">讀取訂單中...</p>';
+  const response = await fetch("/api/orders/lookup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.fromEntries(formData.entries()))
+    body: JSON.stringify(lookup)
   });
   const data = await response.json();
 
   if (!response.ok) {
-    authMessageEl.textContent = data.message || "登入失敗";
-    return;
+    currentLookup = null;
+    refreshOrdersButtonEl.classList.add("hidden");
+    orderSummaryEl.textContent = "沒有符合的訂單。";
+    lookupMessageEl.textContent = data.message || "訂單查詢失敗";
+    renderOrders([]);
+    return false;
   }
 
-  if (data.redirectTo) {
-    window.location.href = data.redirectTo;
-    return;
-  }
-
-  currentBuyer = data.buyer;
-  localStorage.setItem(LAST_PHONE_KEY, currentBuyer.phone || "");
-  form.reset();
-  window.location.href = "/";
+  currentLookup = lookup;
+  localStorage.setItem(LAST_ORDER_ID_KEY, lookup.orderId);
+  localStorage.setItem(LAST_PHONE_KEY, lookup.phone);
+  refreshOrdersButtonEl.classList.remove("hidden");
+  orderSummaryEl.textContent = "已核對訂單編號與結帳手機。";
+  lookupMessageEl.textContent = "查詢完成";
+  renderOrders(data.orders || []);
+  return true;
 }
 
-document.querySelectorAll("[data-auth-mode]").forEach((button) => {
-  button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
-});
-
-loginFormEl.addEventListener("submit", async (event) => {
+lookupFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitAuthForm(loginFormEl, "/api/buyer/login");
-});
-
-registerFormEl.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await submitAuthForm(registerFormEl, "/api/buyer/register");
+  await loadOrders();
 });
 
 refreshOrdersButtonEl.addEventListener("click", loadOrders);
 
 ordersEl.addEventListener("click", async (event) => {
-  const orderId = event.target.dataset.cancelOrder;
-  if (!orderId) return;
+  const button = event.target.closest("[data-cancel-order]");
+  const orderId = button?.dataset.cancelOrder;
+  if (!orderId || !currentLookup) return;
 
   if (!confirm(`確定要申請取消訂單 ${orderId}？賣家同意後才會正式取消。`)) return;
 
-  event.target.disabled = true;
-  const response = await fetch(`/api/buyer/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" });
+  button.disabled = true;
+  lookupMessageEl.textContent = "送出取消申請中...";
+  const response = await fetch("/api/orders/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderId, phone: currentLookup.phone })
+  });
   const data = await response.json();
 
   if (!response.ok) {
-    alert(data.message || "申請取消失敗");
-    event.target.disabled = false;
+    lookupMessageEl.textContent = data.message || "申請取消失敗";
+    button.disabled = false;
     return;
   }
 
-  alert(data.message || "取消申請已送出");
   await loadOrders();
+  lookupMessageEl.textContent = data.message || "取消申請已送出";
 });
 
-loginFormEl.elements.phone.value = localStorage.getItem(LAST_PHONE_KEY) || "";
-registerFormEl.elements.phone.value = localStorage.getItem(LAST_PHONE_KEY) || "";
-setAuthMode("login");
-loadBuyerStatus();
+lookupFormEl.elements.orderId.value = localStorage.getItem(LAST_ORDER_ID_KEY) || "";
+lookupFormEl.elements.phone.value = localStorage.getItem(LAST_PHONE_KEY) || "";
+renderOrders([]);
+
+if (lookupFormEl.elements.orderId.value && lookupFormEl.elements.phone.value) {
+  loadOrders();
+}

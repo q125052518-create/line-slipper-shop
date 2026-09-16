@@ -65,6 +65,7 @@ $requiredFiles = @(
     "scripts\myship-sync.js",
     "scripts\myship-phone.js",
     "public\admin-tools.js",
+    "tests\guest-checkout.test.js",
     "tests\myship-login-window.test.js",
     "tests\myship-phone.test.js",
     "scripts\setup.ps1",
@@ -104,14 +105,14 @@ if (-not $node) {
     $nodeVersionOutput = (& node.exe --version 2>&1 | Out-String).Trim()
     $nodeCode = $LASTEXITCODE
     Add-Check "node-runtime" ($nodeCode -eq 0) $nodeVersionOutput
-    foreach ($relativePath in @("server.js", "scripts\myship-sync.js", "scripts\myship-phone.js", "public\admin-tools.js")) {
+    foreach ($relativePath in @("server.js", "scripts\myship-sync.js", "scripts\myship-phone.js", "public\admin-tools.js", "public\app.js", "public\cart.js", "public\orders.js")) {
         $output = (& node.exe --check (Join-Path $root $relativePath) 2>&1 | Out-String).Trim()
         $code = $LASTEXITCODE
         Add-Check ("node-syntax:{0}" -f $relativePath) ($code -eq 0) $(if ($code -eq 0) { "Syntax OK" } else { $output })
     }
-    $testOutput = (& node.exe --test (Join-Path $root "tests\myship-login-window.test.js") (Join-Path $root "tests\myship-phone.test.js") 2>&1 | Out-String).Trim()
+    $testOutput = (& node.exe --test (Join-Path $root "tests\guest-checkout.test.js") (Join-Path $root "tests\myship-login-window.test.js") (Join-Path $root "tests\myship-phone.test.js") 2>&1 | Out-String).Trim()
     $testCode = $LASTEXITCODE
-    Add-Check "myship-regression-tests" ($testCode -eq 0) $(if ($testCode -eq 0) { "Login UI and phone normalization regression tests passed; no real browser or business API calls" } else { $testOutput })
+    Add-Check "storefront-and-myship-regression-tests" ($testCode -eq 0) $(if ($testCode -eq 0) { "Guest checkout passed with isolated temporary data; MyShip safety tests passed; no production data or external order calls" } else { $testOutput })
 }
 
 if ($PackageMode) {

@@ -1296,66 +1296,6 @@ h1 {
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
 }
 
-body.buyer-logged-in .orders-layout {
-  grid-template-columns: 1fr;
-  margin: 0 auto;
-  max-width: 1120px;
-  width: 100%;
-}
-
-body.orders-page:not(.buyer-logged-in) {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-}
-
-body.orders-page:not(.buyer-logged-in) .app-header,
-body.orders-page:not(.buyer-logged-in) .orders-layout > .catalog-panel {
-  display: none;
-}
-
-body.orders-page:not(.buyer-logged-in) .orders-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  min-height: 100vh;
-  padding: 24px;
-  place-items: center;
-  width: 100%;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel {
-  align-self: center;
-  justify-self: center;
-  max-width: 520px;
-  padding: 32px 36px;
-  position: static;
-  width: 100%;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel h2 {
-  font-size: 28px;
-  margin-bottom: 24px;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel .auth-tabs {
-  gap: 10px;
-  margin-bottom: 22px;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel .auth-tabs button,
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel .order-form button {
-  font-size: 18px;
-  padding: 13px 18px;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel .order-form {
-  gap: 16px;
-}
-
-body.orders-page:not(.buyer-logged-in) #buyerAuthPanel input {
-  min-height: 48px;
-}
-
 .section-head,
 .cart-item,
 .total-row,

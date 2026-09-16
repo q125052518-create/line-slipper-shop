@@ -1,16 +1,23 @@
 # 第一站 LINE 拖鞋下單系統
 
+## 訪客結帳（2026-09-16）
+
+- 前台商品與購物車不再要求買家帳號或 LINE 登入；顧客選品後，只需在結帳頁填姓名、手機及取貨資料即可建立訂單。
+- 結帳 API 仍會驗證收件資料、取貨方式、7-11 門市／宅配地址、商品、數量與即時庫存；既有登入 Session 只保留相容關聯，不會覆蓋本次表單資料。
+- 訂單查詢與取消申請改用「完整訂單編號＋結帳手機」精確核對，不會只憑手機列出全部訂單。
+- 第一站回歸：`node --test tests/guest-checkout.test.js tests/myship-login-window.test.js tests/myship-phone.test.js`。訪客測試使用隔離臨時資料與 headless Chromium，不寫正式訂單、不啟動賣貨便 worker。
+
 ## 賣貨便端到端修正（2026-09-15）
 
 - 本機 worker 會把台灣手機的 `+886` 格式正規化為 `09` 開頭，再填入賣貨便收件欄位。
 - 7-ELEVEN 電子地圖只接受店號完全相符且可用的官方 `GoMap` 結果；停用門市不會被誤點。若訂單使用官方推薦的鄰近門市，worker 會用本機 `data/local-myship-store-alias.json` 重新查詢來源門市、驗證推薦仍有效，再走官方推薦流程。該檔不進 Git 或交接包。
-- 第一站回歸：`node --test tests/myship-login-window.test.js tests/myship-phone.test.js`。2026-09-15 已用一筆受控訂單完成正式 MyShip 建單與雲端 result 讀回；實際建單仍必須由使用者明確授權 `-AllowOrderCreation`。
+- 第一站回歸：`node --test tests/guest-checkout.test.js tests/myship-login-window.test.js tests/myship-phone.test.js`。2026-09-15 已用一筆受控訂單完成正式 MyShip 建單與雲端 result 讀回；實際建單仍必須由使用者明確授權 `-AllowOrderCreation`。
 
 ## 登入入口修正（2026-09-12）
 
 - 後台登入按鈕只在使用者目前的 Chrome 開啟官方 `myship/list1` 頁面，保留彈出視窗被阻擋與導航失敗的明確狀態；不呼叫建單 API、不啟動本機 worker，也不複製登入資料。
 - HAXX 正式 `app/line_shop_admin.py` 的 `POST admin/myship/open-login-window` 只回傳官方登入網址與 `localWorkerStarted=false`；不得把登入請求轉成 `start_line_myship_worker`，也不得轉送到 Render 的伺服器端瀏覽器啟動器。
-- 第一站回歸：`node --test tests/myship-login-window.test.js tests/myship-phone.test.js`；HAXX 回歸：`.venv/Scripts/python.exe -B -m unittest discover -s tests -p test_line_myship_login_safety.py`。前者已整合到正式 `scripts/verify.ps1`。
+- 第一站回歸：`node --test tests/guest-checkout.test.js tests/myship-login-window.test.js tests/myship-phone.test.js`；HAXX 回歸：`.venv/Scripts/python.exe -B -m unittest discover -s tests -p test_line_myship_login_safety.py`。前者已整合到正式 `scripts/verify.ps1`。
 - 目前 Chrome 分頁已登入不等於背景 worker 可使用。原 worker 仍只支援經授權的專用 CDP 或 Profile；瀏覽器擴充工具分頁沒有已驗證的背景 worker 連接器。沒有正式連接與有效 GM 賣場網址時不得標記自動建單就緒。
 - 上述修改必須另行部署並讀回 Render 靜態檔及 HAXX 已載入版本，才能稱為正式網站入口修復；本機來源／離線回歸通過不代表已部署或完成真實下單驗收。
 
@@ -35,9 +42,11 @@
 | 元件 | 功能 |
 |---|---|
 | 前台賣場 | 商品分類、子分類、商品、款式、圖片、售價、庫存、賣場版面區塊、購物車與庫存上限檢查。 |
-| 買家帳號 | 註冊、登入、登出、狀態查詢、個人訂單、訂單查詢與取消申請。 |
+| 訪客購買 | 不需註冊、買家 Session 或 LINE 登入；選品後直接填結帳與取貨資料。 |
+| 買家帳號 | 舊帳號與 API 保留相容，但不再是加入購物車或結帳的前置條件。 |
 | 結帳 | 宅配、自行取貨、7-11 賣貨便門市資訊、運費、地址與收件資料驗證、建立訂單並扣庫存。 |
-| 聊聊 | 買家發訊息、賣家回覆、後台未讀狀態與 Server-Sent Events 即時更新。 |
+| 訂單查詢 | 以完整訂單編號與結帳手機精確核對，顯示該筆訂單並可提出取消申請。 |
+| 聊聊 | 既有登入買家可發訊息、賣家回覆、後台未讀狀態與 Server-Sent Events 即時更新。 |
 | 後台訂單 | 訂單列表、狀態更新、取消申請核准／拒絕、統計資料。 |
 | 後台商品 | 賣場、分類、子分類、商品、款式、條碼、售價、庫存、上架狀態與排序。 |
 | Excel | 商品大量上架範本、批量庫存匯入、MallBic 訂單匯出格式。 |
@@ -81,7 +90,7 @@ HAXX FastAPI
 | `server.js` | 第一站 Node/Express 主程式 | 是，保存目前工作樹版本 |
 | `scripts/myship-sync.js` | 本機賣貨便 worker | 是，保存目前工作樹版本 |
 | `scripts/myship-phone.js` | 台灣手機格式正規化 | 是 |
-| `public/` | 前台、購物車、登入、聊聊及後台頁面 | 是 |
+| `public/` | 前台、購物車、訪客查單、聊聊及後台頁面 | 是 |
 | `data/catalog.json` | 商品、分類、款式與庫存種子資料 | 是 |
 | `data/store-layout.json` | 首頁版面設定 | 是 |
 | `data/mallbic-order-template.xls` | MallBic 訂單格式範本 | 是 |

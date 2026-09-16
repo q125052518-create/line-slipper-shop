@@ -4364,23 +4364,33 @@ app.post("/api/buyer/orders/:id/cancel", requireBuyerApi, async (req, res) => {
   res.json({ order: publicOrderView(order), message: "取消申請已送出，等待賣家同意" });
 });
 
-app.post("/api/orders/lookup", requireBuyerApi, async (req, res) => {
+app.post("/api/orders/lookup", async (req, res) => {
   const { phone, orderId } = req.body || {};
+  const cleanOrderId = String(orderId || "").trim();
+  const cleanPhone = normalizePhone(phone);
+  if (!cleanOrderId || cleanOrderId.length > 100 || cleanPhone.length < 8 || cleanPhone.length > 15) {
+    return res.status(400).json({ message: "請輸入訂單編號與正確的結帳手機" });
+  }
+
   const orders = await readOrders();
-  const matchedOrders = findBuyerOrders(orders, { phone: req.buyer.phone || phone, orderId }).map(publicOrderView);
+  const matchedOrders = findBuyerOrders(orders, { phone: cleanPhone, orderId: cleanOrderId }).map(publicOrderView);
+  if (!matchedOrders.length) {
+    return res.status(404).json({ message: "查不到符合的訂單，請確認訂單編號與結帳手機" });
+  }
 
   res.json({ orders: matchedOrders });
 });
 
-app.post("/api/orders/cancel", requireBuyerApi, async (req, res) => {
-  const { orderId } = req.body || {};
+app.post("/api/orders/cancel", async (req, res) => {
+  const { orderId, phone } = req.body || {};
   const cleanOrderId = String(orderId || "").trim();
-  if (!cleanOrderId) {
-    return res.status(400).json({ message: "請輸入訂單編號" });
+  const cleanPhone = normalizePhone(phone);
+  if (!cleanOrderId || cleanOrderId.length > 100 || cleanPhone.length < 8 || cleanPhone.length > 15) {
+    return res.status(400).json({ message: "請輸入訂單編號與正確的結帳手機" });
   }
 
   const orders = await readOrders();
-  const order = findBuyerOrders(orders, { phone: req.buyer.phone, orderId: cleanOrderId })[0];
+  const order = findBuyerOrders(orders, { phone: cleanPhone, orderId: cleanOrderId })[0];
   if (!order) return res.status(404).json({ message: "查不到這筆訂單，請確認手機號碼與訂單編號" });
   if (!canBuyerRequestCancelOrder(order)) {
     return res.status(400).json({ message: order.cancelRequest?.status === "pending" ? "這筆訂單已送出取消申請，請等待賣家確認" : "這筆訂單目前不能申請取消，請聯絡賣家處理" });
@@ -4392,11 +4402,14 @@ app.post("/api/orders/cancel", requireBuyerApi, async (req, res) => {
   res.json({ order: publicOrderView(order), message: "取消申請已送出，等待賣家同意" });
 });
 
-app.post("/api/orders", requireBuyerApi, async (req, res) => {
-  const { lineUserId, customerName, phone, deliveryMethod, deliveryAddress, note, items } = req.body;
-  const buyer = req.buyer;
-  const orderCustomerName = String(buyer?.name || customerName || "").trim();
-  const orderPhone = String(buyer?.phone || phone || "").trim();
+app.post("/api/orders", async (req, res) => {
+  const { lineUserId, customerName, phone, deliveryMethod, deliveryAddress, note, items } = req.body || {};
+  const buyer = await getBuyerFromRequest(req);
+  const orderCustomerName = String(customerName || "").trim();
+  const orderPhone = String(phone || "").trim();
+  const normalizedOrderPhone = normalizePhone(orderPhone);
+  const cleanLineUserId = String(lineUserId || "guest").trim().slice(0, 200) || "guest";
+  const cleanNote = String(note || "").trim();
   const cleanDeliveryMethod = String(deliveryMethod || "").trim();
   const cleanDeliveryAddress = String(deliveryAddress || "").trim();
   const rawSevenElevenStore = req.body?.sevenElevenStore || {};
@@ -4405,6 +4418,26 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
     name: String(rawSevenElevenStore.name || req.body?.sevenElevenStoreName || "").trim(),
     address: String(rawSevenElevenStore.address || req.body?.sevenElevenStoreAddress || "").trim()
   };
+
+  if (!orderCustomerName) {
+    return res.status(400).json({ message: "請輸入姓名" });
+  }
+
+  if (orderCustomerName.length > 80) {
+    return res.status(400).json({ message: "姓名長度不能超過 80 個字" });
+  }
+
+  if (orderPhone.length > 30 || normalizedOrderPhone.length < 8 || normalizedOrderPhone.length > 15) {
+    return res.status(400).json({ message: "請輸入正確的手機號碼" });
+  }
+
+  if (cleanDeliveryAddress.length > 300 || cleanSevenElevenStore.id.length > 20 || cleanSevenElevenStore.name.length > 100 || cleanSevenElevenStore.address.length > 300) {
+    return res.status(400).json({ message: "取貨資訊長度超過限制" });
+  }
+
+  if (cleanNote.length > 1000) {
+    return res.status(400).json({ message: "備註長度不能超過 1000 個字" });
+  }
 
   if (!["宅配", "自行取貨", sevenElevenDeliveryMethod].includes(cleanDeliveryMethod)) {
     return res.status(400).json({ message: "請選擇取貨方式" });
@@ -4422,6 +4455,10 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "請至少選擇一項商品" });
+  }
+
+  if (items.length > 100) {
+    return res.status(400).json({ message: "單筆訂單品項不能超過 100 項" });
   }
 
   const catalog = await readCatalog();
@@ -4468,7 +4505,7 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
   const order = {
     id: `ORD-${Date.now()}`,
     buyerId: buyer?.id || "",
-    lineUserId: lineUserId || "guest",
+    lineUserId: cleanLineUserId,
     customerName: orderCustomerName,
     phone: orderPhone,
     deliveryMethod: cleanDeliveryMethod,
@@ -4478,7 +4515,7 @@ app.post("/api/orders", requireBuyerApi, async (req, res) => {
         ? cleanSevenElevenStore.address
         : "",
     sevenElevenStore: cleanDeliveryMethod === sevenElevenDeliveryMethod ? cleanSevenElevenStore : null,
-    note: note || "",
+    note: cleanNote,
     items: normalizedItems,
     productTotal,
     shippingFee,

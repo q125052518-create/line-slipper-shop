@@ -9,8 +9,7 @@ const state = {
   currentCategoryId: "all",
   selectedVariants: {},
   openProductId: "",
-  cart: readCart(),
-  buyer: null
+  cart: readCart()
 };
 
 let cartPopupTimer = null;
@@ -56,15 +55,6 @@ async function loadMarkets() {
   state.currentCategoryId = "all";
   renderCatalog();
   renderCartCount();
-}
-
-async function loadBuyerStatus() {
-  try {
-    const data = await fetch("/api/buyer/status").then((response) => response.json());
-    state.buyer = data.authenticated ? data.buyer : null;
-  } catch {
-    state.buyer = null;
-  }
 }
 
 function readCart() {
@@ -569,7 +559,6 @@ function renderProducts() {
     const selected = selectedVariant(product);
     const imageUrl = productListImage(product);
     const disabled = !selected || selected.stock <= 0;
-    const loginRequired = !state.buyer;
 
     return `
       <article class="shop-product-card" role="button" tabindex="0" data-open-product="${escapeHtml(product.id)}">
@@ -604,8 +593,8 @@ function renderProducts() {
             <span data-stock-line="${escapeHtml(product.id)}">庫存 ${selected?.stock ?? 0}</span>
           </div>
           <div class="shop-product-actions">
-            <input type="number" min="1" max="${selected?.stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled || loginRequired ? "disabled" : ""}>
-            <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : loginRequired ? "登入購買" : "加入購物車"}</button>
+            <input type="number" min="1" max="${selected?.stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>
+            <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${disabled ? "售完" : "加入購物車"}</button>
           </div>
         </div>
       </article>
@@ -651,8 +640,7 @@ function renderProductDetail(productId = state.openProductId) {
   const stock = selected ? Number(selected.stock || 0) : productTotalStock(product);
   const needsVariant = variants.length > 0 && !selected;
   const disabled = needsVariant || !selected || stock <= 0;
-  const loginRequired = !state.buyer;
-  const actionText = needsVariant ? "請選擇品項" : disabled ? "售完" : loginRequired ? "登入購買" : "加入購物車";
+  const actionText = needsVariant ? "請選擇品項" : disabled ? "售完" : "加入購物車";
   const overlay = ensureProductDetailOverlay();
 
   overlay.innerHTML = `
@@ -698,7 +686,7 @@ function renderProductDetail(productId = state.openProductId) {
             <span>庫存 ${stock}</span>
           </div>
           <div class="product-detail-actions">
-            <input type="number" min="1" max="${stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled || loginRequired ? "disabled" : ""}>
+            <input type="number" min="1" max="${stock || 1}" value="1" aria-label="數量" data-add-quantity="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>
             <button type="button" data-add-product="${escapeHtml(product.id)}" ${disabled ? "disabled" : ""}>${actionText}</button>
           </div>
         </div>
@@ -708,12 +696,6 @@ function renderProductDetail(productId = state.openProductId) {
 }
 
 function addToCart(productId) {
-  if (!state.buyer) {
-    messageEl.textContent = "請先登入買家帳號，再加入購物車";
-    window.location.href = "/orders.html";
-    return;
-  }
-
   const market = currentMarket();
   const product = market?.products.find((entry) => entry.id === productId);
   const variant = product ? explicitSelectedVariant(product) : null;
@@ -854,4 +836,4 @@ desktopStoreMedia.addEventListener("change", () => {
   renderCatalog();
 });
 
-loadBuyerStatus().finally(loadMarkets);
+loadMarkets();

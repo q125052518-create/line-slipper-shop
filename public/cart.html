@@ -44,11 +44,11 @@
         <form id="orderForm" class="order-form">
           <label>
             姓名
-            <input name="customerName" autocomplete="name" required>
+            <input name="customerName" autocomplete="name" maxlength="80" required>
           </label>
           <label>
             電話
-            <input name="phone" autocomplete="tel" required>
+            <input name="phone" inputmode="tel" autocomplete="tel" maxlength="30" required>
           </label>
           <label>
             取貨方式
@@ -61,7 +61,7 @@
           </label>
           <label id="addressField" class="hidden">
             宅配地址
-            <input name="deliveryAddress" id="deliveryAddress" autocomplete="street-address">
+            <input name="deliveryAddress" id="deliveryAddress" autocomplete="street-address" maxlength="300">
           </label>
           <div id="sevenElevenField" class="store-picker hidden">
             <div class="store-picker-head">
@@ -71,20 +71,20 @@
             <p class="muted">選完門市後會自動帶回購物車；如果尚未設定綠界電子地圖，會先開啟 7-11 門市查詢備援。</p>
             <label>
               門市店號
-              <input name="sevenElevenStoreId" id="sevenElevenStoreId" inputmode="numeric" autocomplete="off">
+              <input name="sevenElevenStoreId" id="sevenElevenStoreId" inputmode="numeric" autocomplete="off" maxlength="20">
             </label>
             <label>
               門市名稱
-              <input name="sevenElevenStoreName" id="sevenElevenStoreName" autocomplete="off">
+              <input name="sevenElevenStoreName" id="sevenElevenStoreName" autocomplete="off" maxlength="100">
             </label>
             <label>
               門市地址
-              <input name="sevenElevenStoreAddress" id="sevenElevenStoreAddress" autocomplete="street-address">
+              <input name="sevenElevenStoreAddress" id="sevenElevenStoreAddress" autocomplete="street-address" maxlength="300">
             </label>
           </div>
           <label>
             備註
-            <textarea name="note" rows="3" placeholder="尺寸需求、顏色備註、其他資訊"></textarea>
+            <textarea name="note" rows="3" maxlength="1000" placeholder="尺寸需求、顏色備註、其他資訊"></textarea>
           </label>
           <button type="submit">送出訂單</button>
           <p id="message" class="message"></p>
