@@ -31,7 +31,7 @@ const storeTabsEl = document.querySelector("#storeTabs");
 const layoutBlocksEl = document.querySelector("#layoutBlocks");
 const categoryDirectoryEl = document.querySelector("#categoryDirectory");
 const productShellEl = document.querySelector("#productShell");
-const appHeaderTitleEl = document.querySelector(".app-header h1");
+const appHeaderTitleEl = document.querySelector(".header-store-name");
 
 async function loadMarkets() {
   const [data, layoutData] = await Promise.all([
@@ -298,7 +298,6 @@ function renderStoreHead() {
   marketDescriptionEl.textContent = storeDescription;
   storeAvatarEl.src = imageUrl;
   storeAvatarEl.alt = storeName;
-  document.querySelector("#headerAvatar").src = imageUrl;
   storeProductCountEl.textContent = productCount;
   storeCategoryCountEl.textContent = categoryCount;
 }
@@ -376,6 +375,7 @@ function renderLayoutBanner(block) {
 function renderLayoutNotice(block) {
   return `
     <section class="store-layout-section store-notice-block">
+      <img src="/assets/icons/megaphone.svg" alt="" width="17" height="17">
       <strong>${escapeHtml(block.title || "賣場公告")}</strong>
       <p>${escapeHtml(block.text || "尚未輸入公告內容")}</p>
     </section>
@@ -408,15 +408,20 @@ function renderLayoutProductBlock(block, products = layoutProductsForBlock(block
   return `
     <section class="store-layout-section store-product-strip-section">
       <div class="store-layout-section-head">
-        <h2>${escapeHtml(block.title || "商品區")}</h2>
+        <div><p class="store-section-kicker">THE LITTLE FINDS</p><h2>${escapeHtml(block.title || "商品區")}</h2></div>
         <button type="button" class="store-view-all" data-open-category="all">全部商品 <img src="/assets/icons/arrow-right.svg" alt="" width="16" height="16"></button>
       </div>
-      <div class="store-product-strip">
+      <div class="store-product-strip ${products.length === 1 ? "is-single" : ""}" style="--product-columns: ${Math.min(products.length, 4)};">
         ${products.map((product) => `
           <button type="button" class="store-strip-product-card" data-open-product="${escapeHtml(product.id)}">
-            <img src="${escapeHtml(productImage(product))}" alt="" onerror="this.src='${escapeHtml(placeholderImage(product.name))}';">
-            <strong>${escapeHtml(product.name)}</strong>
-            <span>${escapeHtml(productPriceText(product))}</span>
+            <span class="store-item-media"><img class="store-item-image" src="${escapeHtml(productImage(product))}" alt="" onerror="this.src='${escapeHtml(placeholderImage(product.name))}';"></span>
+            <span class="store-item-copy">
+              <span class="store-item-category">${escapeHtml(categoryName(product.categoryId))}</span>
+              <strong>${escapeHtml(product.name)}</strong>
+              <span class="store-item-options">${(product.variants || []).length} 款規格 <span aria-hidden="true">/</span> ${productTotalStock(product) > 0 ? "有庫存" : "暫時售完"}</span>
+              <span class="store-item-price">${escapeHtml(productPriceText(product))}</span>
+              <span class="store-item-action">查看商品 <img src="/assets/icons/arrow-right.svg" alt="" width="18" height="18"></span>
+            </span>
           </button>
         `).join("") || '<p class="empty">目前沒有商品</p>'}
       </div>
@@ -493,6 +498,7 @@ function renderStoreTabPanels() {
   const isProducts = state.currentStoreTab === "products";
   const isCategories = state.currentStoreTab === "categories";
   const isCategoryProducts = isCategories && state.currentCategoryId !== "all";
+  document.querySelector("#storeHero")?.classList.toggle("hidden", !isStore);
   if (layoutBlocksEl) {
     layoutBlocksEl.classList.toggle("hidden", !isStore || layoutBlocksEl.dataset.hasBlocks !== "true");
   }

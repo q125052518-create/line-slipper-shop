@@ -47,7 +47,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
   // This storefront does not need the external LINE SDK for browsing or guest checkout.
   await page.route('https://static.line-scdn.net/**', route => route.fulfill({ body: '' }));
   const base = `http://127.0.0.1:${server.address().port}`;
-  for (const width of [1440, 768, 390, 320]) {
+  for (const width of [1920, 1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 920 });
     await page.goto(base);
     await page.locator('.store-strip-product-card').first().waitFor();
@@ -59,7 +59,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     const geometry = await page.evaluate(() => ({
       overflowing: document.documentElement.scrollWidth > innerWidth,
       brokenImages: Array.from(document.images).filter(image => image.offsetWidth > 0 && !image.naturalWidth).map(image => image.src),
-      header: Array.from(document.querySelectorAll('.storefront-home h1, .storefront-search, .header-actions')).map(el => {
+      header: Array.from(document.querySelectorAll('.header-store-name, .storefront-search, .header-actions')).map(el => {
         const { x, y, width, height } = el.getBoundingClientRect();
         return { x, y, width, height };
       })
@@ -85,6 +85,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.keyboard.press('Escape');
     await page.locator('#productSearch').fill(product.name);
     assert.equal(await page.locator('#productShell').isVisible(), true);
+    assert.equal(await page.locator('#storeHero').isVisible(), false);
     assert.equal(await page.locator('#products [data-open-product]').count(), 1);
     await page.locator('#productSearch').fill('no-matching-product-012345');
     assert.equal(await page.locator('#products .empty').textContent(), '沒有符合的商品');
@@ -93,7 +94,21 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.locator('.store-directory-row').first().click();
     assert.equal(await page.locator('#productShell').isVisible(), true);
     assert.equal(await page.locator('#productSearch').inputValue(), '');
+    await page.locator('[data-store-tab="store"]').click();
+    await page.locator('.store-hero-button').click();
+    assert.equal(await page.locator('#storeHero').isVisible(), false);
+    assert.equal(await page.locator('#products [data-open-product]').count(), 1);
+    if (process.env.STOREFRONT_SCREENSHOT_DIR) {
+      await page.screenshot({ path: path.join(process.env.STOREFRONT_SCREENSHOT_DIR, `products-${width}.png`), fullPage: true });
+    }
     await page.evaluate(() => localStorage.clear());
   }
+  catalog.markets[0].products = Array.from({ length: 6 }, (_, index) => ({ ...product, id: `grid-${index}`, name: `Grid item ${index + 1}` }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(base);
+  await page.locator('.store-strip-product-card').first().waitFor();
+  assert.equal(await page.locator('.store-strip-product-card').count(), 6);
+  assert.equal(await page.locator('.store-product-strip.is-single').count(), 0);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(errors, []);
 });
