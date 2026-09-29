@@ -32,13 +32,6 @@ const layoutBlocksEl = document.querySelector("#layoutBlocks");
 const categoryDirectoryEl = document.querySelector("#categoryDirectory");
 const productShellEl = document.querySelector("#productShell");
 const appHeaderTitleEl = document.querySelector(".app-header h1");
-const desktopStoreMedia = window.matchMedia("(min-width: 901px)");
-
-function normalizeStoreTabForViewport() {
-  if (desktopStoreMedia.matches && state.currentStoreTab === "categories") {
-    state.currentStoreTab = "store";
-  }
-}
 
 async function loadMarkets() {
   const [data, layoutData] = await Promise.all([
@@ -295,7 +288,7 @@ function renderStoreHead() {
   const market = currentMarket();
   const productCount = marketProducts().length;
   const categoryCount = state.categories.length;
-  const storeName = market?.name || "拖鞋賣場";
+  const storeName = market?.name || "曜鑰購物";
   const storeDescription = market?.description || "精選商品，線上下單。";
   const imageUrl = market?.imageUrl || marketProducts().find((product) => product.imageUrl)?.imageUrl || placeholderImage(storeName || "Shop");
 
@@ -305,6 +298,7 @@ function renderStoreHead() {
   marketDescriptionEl.textContent = storeDescription;
   storeAvatarEl.src = imageUrl;
   storeAvatarEl.alt = storeName;
+  document.querySelector("#headerAvatar").src = imageUrl;
   storeProductCountEl.textContent = productCount;
   storeCategoryCountEl.textContent = categoryCount;
 }
@@ -415,10 +409,11 @@ function renderLayoutProductBlock(block, products = layoutProductsForBlock(block
     <section class="store-layout-section store-product-strip-section">
       <div class="store-layout-section-head">
         <h2>${escapeHtml(block.title || "商品區")}</h2>
+        <button type="button" class="store-view-all" data-open-category="all">全部商品 <img src="/assets/icons/arrow-right.svg" alt="" width="16" height="16"></button>
       </div>
       <div class="store-product-strip">
         ${products.map((product) => `
-          <button type="button" class="store-strip-product-card" data-open-category="${escapeHtml(product.categoryId || "all")}">
+          <button type="button" class="store-strip-product-card" data-open-product="${escapeHtml(product.id)}">
             <img src="${escapeHtml(productImage(product))}" alt="" onerror="this.src='${escapeHtml(placeholderImage(product.name))}';">
             <strong>${escapeHtml(product.name)}</strong>
             <span>${escapeHtml(productPriceText(product))}</span>
@@ -493,7 +488,6 @@ function renderCategoryDirectory() {
 }
 
 function renderStoreTabPanels() {
-  normalizeStoreTabForViewport();
   renderStoreTabs();
   const isStore = state.currentStoreTab === "store";
   const isProducts = state.currentStoreTab === "products";
@@ -531,7 +525,7 @@ function renderCatalog() {
   renderCategoryHome();
   renderLayoutBlocks();
   renderCategoryDirectory();
-  categoryTitleEl.textContent = categoryName(state.currentCategoryId);
+  categoryTitleEl.textContent = productSearchEl.value.trim() ? "搜尋結果" : categoryName(state.currentCategoryId);
   renderSubCategories();
   renderProducts();
   renderStoreTabPanels();
@@ -569,7 +563,7 @@ function renderProducts() {
         <div class="shop-product-body">
           <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
           <h3>${escapeHtml(product.name)}</h3>
-          <p>${escapeHtml(product.description || "拖鞋商品")}</p>
+          ${product.description ? `<p>${escapeHtml(product.description)}</p>` : ""}
           <div class="shop-variant-strip" role="list" aria-label="${escapeHtml(product.name)}品項">
             ${(product.variants || []).map((variant) => {
               const isSelected = selected?.id === variant.id;
@@ -746,12 +740,12 @@ document.addEventListener("click", (event) => {
   const tabButton = event.target.closest("[data-store-tab]");
   if (tabButton) {
     state.currentStoreTab = tabButton.dataset.storeTab || "store";
-    normalizeStoreTabForViewport();
     closeProductDetail();
     if (["products", "categories"].includes(state.currentStoreTab)) {
       state.currentCategoryId = "all";
       state.selectedVariants = {};
     }
+    productSearchEl.value = "";
     renderCatalog();
     return;
   }
@@ -761,6 +755,7 @@ document.addEventListener("click", (event) => {
     state.currentCategoryId = categoryButton.dataset.openCategory;
     state.currentStoreTab = categoryDirectoryEl?.contains(categoryButton) ? "categories" : "products";
     state.selectedVariants = {};
+    productSearchEl.value = "";
     closeProductDetail();
     renderCatalog();
     document.querySelector(".store-product-area")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -828,12 +823,12 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-productSearchEl.addEventListener("input", renderProducts);
-productSortEl.addEventListener("change", renderProducts);
-
-desktopStoreMedia.addEventListener("change", () => {
-  normalizeStoreTabForViewport();
+productSearchEl.addEventListener("input", () => {
+  state.currentStoreTab = "products";
+  state.currentCategoryId = "all";
+  closeProductDetail();
   renderCatalog();
 });
+productSortEl.addEventListener("change", renderProducts);
 
 loadMarkets();

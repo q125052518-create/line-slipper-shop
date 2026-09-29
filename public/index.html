@@ -3,20 +3,28 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>拖鞋賣場</title>
+    <title>曜鑰購物</title>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/storefront.css">
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
   <body class="storefront-page">
+    <div class="storefront-topline">
+      <span>把喜歡收藏好，把心意包裝好。</span>
+      <a href="https://shopee.tw/bluej26252912" target="_blank" rel="noopener noreferrer">蝦皮賣場 <img src="/assets/icons/arrow-up-right.svg" alt="" width="14" height="14"></a>
+    </div>
     <header class="app-header">
       <div class="storefront-brand">
-        <p class="eyebrow">Summer Select</p>
-        <h1>拖鞋賣場</h1>
-        <p class="storefront-header-note">輕鬆挑一雙，陪你走過每個日常。</p>
+        <a href="/" class="storefront-home"><img id="headerAvatar" src="/assets/store/brand-avatar.jpg" alt="" width="52" height="52"><h1>曜鑰購物</h1></a>
       </div>
-      <nav class="header-actions">
-        <a class="cart-link" href="/cart.html">購物車 <span id="cartCount">0</span></a>
-        <a class="cart-link" href="/orders.html">我的訂單</a>
+      <label class="storefront-search" for="productSearch">
+        <img src="/assets/icons/search.svg" alt="" width="20" height="20">
+        <span class="storefront-sr-only">搜尋商品名稱</span>
+        <input id="productSearch" type="search" placeholder="搜尋喜歡的商品" autocomplete="off">
+      </label>
+      <nav class="header-actions" aria-label="購物服務">
+        <a class="cart-link" href="/orders.html"><img src="/assets/icons/package.svg" alt="" width="20" height="20"><span>我的訂單</span></a>
+        <a class="cart-link" href="/cart.html"><img src="/assets/icons/shopping-bag.svg" alt="" width="20" height="20"><span>購物車</span><span id="cartCount">0</span></a>
         <a class="cart-link hidden" data-buyer-chat href="/chat.html">聊聊</a>
         <button class="hidden" data-buyer-logout type="button">登出</button>
       </nav>
@@ -25,10 +33,10 @@
     <main class="shop-layout shopee-style-layout">
       <section class="storefront-cover">
         <div class="store-profile-card">
-          <img id="storeAvatar" src="https://placehold.co/160x160/f2efe8/1e2720?text=Shop" alt="">
+          <img id="storeAvatar" src="/assets/store/brand-avatar.jpg" alt="曜鑰購物">
           <div class="store-profile-copy">
-            <p class="store-status"><span aria-hidden="true"></span>線上賣場</p>
-            <h2 id="storeName">拖鞋賣場</h2>
+            <p class="store-status">COLLECT &amp; CHERISH</p>
+            <h2 id="storeName">曜鑰購物</h2>
             <p id="marketDescription">商品載入中</p>
             <div class="store-profile-actions">
               <a href="/chat.html" data-buyer-chat class="store-outline-button hidden">聊聊</a>
@@ -38,15 +46,15 @@
         <div class="store-meta-grid">
           <span><strong id="storeProductCount">0</strong> 件商品</span>
           <span><strong id="storeCategoryCount">0</strong> 個分類</span>
-          <span><strong>24H</strong> 線上下單</span>
+          <span><strong>免登入</strong> 輕鬆購物</span>
           <span><strong>7-11</strong> 門市取貨</span>
         </div>
       </section>
 
       <nav id="storeTabs" class="store-tabs" aria-label="賣場導覽">
-        <button type="button" data-store-tab="store">賣場</button>
-        <button type="button" data-store-tab="products">商品</button>
-        <button type="button" data-store-tab="categories">分類</button>
+        <button type="button" data-store-tab="store">賣場首頁</button>
+        <button type="button" data-store-tab="products">全部商品</button>
+        <button type="button" data-store-tab="categories">商品分類</button>
       </nav>
 
       <section id="layoutBlocks" class="store-layout-blocks" aria-label="賣場布置"></section>
@@ -62,13 +70,9 @@
           <div id="categoryView">
             <div class="shop-toolbar">
               <div>
-                <p class="eyebrow">Pink Selection</p>
+                <p class="eyebrow">THE COLLECTION</p>
                 <h2 id="categoryTitle">全部商品</h2>
               </div>
-              <label class="shop-search">
-                <span>搜尋</span>
-                <input id="productSearch" type="search" placeholder="搜尋商品名稱">
-              </label>
               <label class="shop-sort">
                 <span>排序</span>
                 <select id="productSort">
@@ -88,6 +92,12 @@
         </section>
       </section>
     </main>
+
+    <footer class="storefront-footer">
+      <span>曜鑰購物 <small>把喜歡，好好收藏。</small></span>
+      <a href="/orders.html">訂單查詢</a>
+      <a href="https://shopee.tw/bluej26252912" target="_blank" rel="noopener noreferrer">蝦皮賣場 <img src="/assets/icons/arrow-up-right.svg" alt="" width="14" height="14"></a>
+    </footer>
 
     <script src="/header.js"></script>
     <script src="/app.js"></script>

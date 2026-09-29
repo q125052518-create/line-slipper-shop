@@ -166,7 +166,7 @@ test("guest can create, look up, and request cancellation of a 7-11 order", asyn
   }));
   assert.match(productViewState.currentTabClass || "", /is-current/, JSON.stringify(productViewState));
   assert.doesNotMatch(productViewState.productShellClass || "", /\bhidden\b/, JSON.stringify(productViewState));
-  await page.locator('[data-open-product="test-product"]').click();
+  await page.locator('#products [data-open-product="test-product"]').click();
   await page.locator('.product-detail-dialog [data-select-variant="test-product"][data-variant-id="test-variant"]').click();
   const addButton = page.locator('.product-detail-dialog [data-add-product="test-product"]');
   await addButton.waitFor({ state: "visible" });
