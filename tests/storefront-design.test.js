@@ -52,6 +52,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.goto(base);
     await page.locator('.store-strip-product-card').first().waitFor();
     assert.equal(await page.locator('#storeName').textContent(), catalog.markets[0].name);
+    assert.equal(await page.locator('a[href*="shopee."]').count(), 0, 'No Shopee storefront links');
     assert.equal(await page.locator('.storefront-home').isVisible(), true, `Brand is hidden at ${width}px`);
     await page.evaluate(async () => {
       await Promise.all(Array.from(document.images).map(image => image.decode().catch(() => {})));
