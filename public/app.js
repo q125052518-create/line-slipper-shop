@@ -637,6 +637,7 @@ function renderProductDetail(productId = state.openProductId) {
   const selected = explicitSelectedVariant(product);
   const variants = product.variants || [];
   const imageUrl = selected?.imageUrl || productListImage(product);
+  const gallery = [...new Set([product.imageUrl, ...(product.imageUrls || [])].filter(Boolean))];
   const stock = selected ? Number(selected.stock || 0) : productTotalStock(product);
   const needsVariant = variants.length > 0 && !selected;
   const disabled = needsVariant || !selected || stock <= 0;
@@ -649,9 +650,10 @@ function renderProductDetail(productId = state.openProductId) {
       <button type="button" class="product-detail-close" aria-label="關閉" data-close-product-detail>×</button>
       <div class="product-detail-grid">
         <div class="product-detail-media">
-          <div class="product-detail-image-frame">
+          <button type="button" class="product-detail-image-frame product-gallery-main" data-enlarge-image="${escapeHtml(imageUrl)}" aria-label="放大商品圖片">
             <img class="product-detail-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}">
-          </div>
+          </button>
+          <div class="product-gallery-thumbs">${gallery.map((url, i) => `<button type="button" data-gallery-select="${escapeHtml(url)}" aria-label="商品圖片 ${i + 1}" aria-pressed="${url === imageUrl}"><img src="${escapeHtml(url)}" alt="商品圖片 ${i + 1}"></button>`).join("")}</div>
           <div class="product-detail-description">
             <h3>商品介紹</h3>
             <p>${escapeHtml(product.description || "精選商品")}</p>
@@ -774,6 +776,14 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const galleryButton = event.target.closest("[data-gallery-select]");
+  if (galleryButton) {
+    const main = document.querySelector(".product-gallery-main");
+    main.querySelector("img").src = galleryButton.dataset.gallerySelect;
+    main.dataset.enlargeImage = galleryButton.dataset.gallerySelect;
+    document.querySelectorAll("[data-gallery-select]").forEach((button) => button.setAttribute("aria-pressed", String(button === galleryButton)));
+    return;
+  }
   const variantButton = event.target.closest("[data-select-variant]");
   if (variantButton) {
     const productId = variantButton.dataset.selectVariant;

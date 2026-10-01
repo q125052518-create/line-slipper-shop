@@ -176,6 +176,7 @@ function productBarcodeLabel(product) {
 function productSearchText(product) {
   return [
     product.id,
+    product.sku,
     product.name,
     product.description,
     categoryName(product.categoryId),
@@ -216,7 +217,8 @@ async function collectVariantsWithImages(container) {
       barcode: row.querySelector('[name="barcode"]').value,
       price: Number(row.querySelector('[name="price"]').value),
       stock: Number(row.querySelector('[name="stock"]').value),
-      imageUrl: file ? await readFileAsDataUrl(file) : row.querySelector('[name="variantImageUrl"]').value
+      imageUrl: file ? await ProductEditor.upload(file) : row.querySelector('[name="variantImageUrl"]').value,
+      options: [row.querySelector('[name="option1"]').value, row.querySelector('[name="option2"]').value]
     };
   }));
 }
@@ -249,7 +251,7 @@ function setImageUploaderValue(form, value) {
 
 function resetImageUploaders(form) {
   form.querySelectorAll(".image-uploader").forEach((uploader) => {
-    uploader.querySelector('input[type="hidden"]').value = "";
+    uploader.querySelector('input[name$="ImageUrl"], input[name="imageUrl"]').value = "";
     const fileInput = uploader.querySelector('input[type="file"]');
     if (fileInput) fileInput.value = "";
     uploader.querySelector("[data-image-preview]").outerHTML =
@@ -272,6 +274,7 @@ function showProductCreate() {
   if (productFormEl) {
     productFormEl.reset();
     resetImageUploaders(productFormEl);
+    document.querySelector("#newProductFields").innerHTML = ProductEditor.fields();
     renderCategoryOptions(productFormEl.elements.categoryId);
   }
   if (newVariantsEl) newVariantsEl.innerHTML = variantRow();
@@ -333,14 +336,15 @@ function variantRow(variant = {}) {
         <input name="stock" type="number" min="0" step="1" placeholder="庫存" value="${escapeHtml(variant.stock ?? 0)}" required>
       </label>
       <label class="variant-image-field">
-        品項圖片
+        選項圖片
         <span class="image-uploader variant-image-uploader">
           ${imagePreviewMarkup(variant.imageUrl || "")}
           <input type="file" name="variantImageFile" accept="image/*">
-          <input type="hidden" name="variantImageUrl" value="${escapeHtml(variant.imageUrl || "")}">
+          <input name="variantImageUrl" aria-label="選項圖片網址" placeholder="圖片網址" value="${escapeHtml(variant.imageUrl || "")}">
           <button type="button" data-clear-image>刪除圖片</button>
         </span>
       </label>
+      <div class="listing-option-values"><label>規格選項 1<input name="option1" value="${escapeHtml(variant.options?.[0])}"></label><label>規格選項 2<input name="option2" value="${escapeHtml(variant.options?.[1])}"></label></div>
       <button type="button" class="danger-button" data-remove-variant>刪除</button>
     </div>
   `;
@@ -452,6 +456,7 @@ function productCardMarkup(product) {
       <div class="admin-product-card-body">
         <p class="category-pill">${escapeHtml(categoryName(product.categoryId))}</p>
         <h3>${escapeHtml(product.name)}</h3>
+        ${product.isActive === false ? '<span class="listing-inactive">已下架</span>' : ''}
         <p class="admin-product-card-code">${escapeHtml(productBarcodeLabel(product))}</p>
         <p class="admin-product-card-price">${escapeHtml(productPriceLabel(product))}</p>
         <div class="admin-product-card-meta">
@@ -500,22 +505,15 @@ function productEditFormMarkup(product) {
         <input name="name" value="${escapeHtml(product.name)}" required>
       </label>
       <label>
-        商品圖片
-        <span class="image-uploader">
-          ${imagePreviewMarkup(product.imageUrl || "")}
-          <input type="file" name="imageFile" accept="image/*">
-          <input type="hidden" name="imageUrl" value="${escapeHtml(product.imageUrl || "")}">
-          <button type="button" data-clear-image>刪除圖片</button>
-        </span>
-      </label>
-      <label>
         商品說明
         <textarea name="description" rows="2">${escapeHtml(product.description || "")}</textarea>
       </label>
+      ${ProductEditor.fields(product)}
       <div class="variant-editor">
         ${productVariants(product).map((variant) => variantRow(variant)).join("")}
       </div>
       <button type="button" data-add-variant>新增品項</button>
+      <div class="listing-save-bar"><button type="submit">儲存商品</button></div>
     </form>
   `;
 }
@@ -635,11 +633,13 @@ categoryFormEl?.addEventListener("submit", async (event) => {
 
 productFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (productFormEl.dataset.saving) return;
   const market = currentMarket();
   if (!market) return;
 
   const formData = new FormData(productFormEl);
-  const imageUrl = await productImageFromForm(productFormEl, formData);
+  productFormEl.dataset.saving = "true";
+  productFormEl.inert = true;
 
   try {
     await requestJson(`/api/admin/markets/${encodeURIComponent(market.id)}/products`, {
@@ -648,7 +648,7 @@ productFormEl.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         categoryId: formData.get("categoryId"),
         name: formData.get("name"),
-        imageUrl,
+        ...await ProductEditor.collect(productFormEl),
         description: formData.get("description"),
         variants: await collectVariantsWithImages(newVariantsEl)
       })
@@ -663,10 +663,37 @@ productFormEl.addEventListener("submit", async (event) => {
     showProductNotice("已成功");
   } catch (error) {
     alert(error.message);
-  }
+  } finally { delete productFormEl.dataset.saving; productFormEl.inert = false; }
 });
 
 document.addEventListener("click", async (event) => {
+  const form = event.target.closest("form");
+  if (event.target.matches("[data-generate-variants]")) {
+    const values = [0, 1].map((i) => [...new Set(form.querySelector(`[data-option-values="${i}"]`).value.split(/[,，\n]/).map((v) => v.trim()).filter(Boolean))]);
+    if (!values[0].length || !form.elements.optionName1.value.trim()) return alert("請填規格名稱 1 和規格選項 1");
+    if (values[1].length && !form.elements.optionName2.value.trim()) return alert("請填規格名稱 2");
+    const combinations = values[0].flatMap((first) => (values[1].length ? values[1] : [""]).map((second) => [first, second]));
+    const editor = form.querySelector(".variant-editor");
+    if (combinations.length + editor.children.length > 201) return alert("每件商品最多產生 200 組選項");
+    const existing = new Set([...editor.querySelectorAll('[name="variantName"]')].map((el) => el.value));
+    for (const row of editor.querySelectorAll("[data-variant-row]")) {
+      if (!row.querySelector('[name="variantName"]').value && !row.querySelector('[name="barcode"]').value) row.remove();
+    }
+    for (const options of combinations) {
+      const name = options.filter(Boolean).join(" / ");
+      if (!existing.has(name)) editor.insertAdjacentHTML("beforeend", variantRow({ name, options }));
+    }
+  }
+  if (event.target.matches("[data-apply-variant-values]")) {
+    for (const [selector, name] of [["[data-bulk-price]", "price"], ["[data-bulk-stock]", "stock"]]) {
+      const input = form.querySelector(selector);
+      if (input.value !== "" && !input.checkValidity()) return input.reportValidity();
+    }
+    for (const [selector, name] of [["[data-bulk-price]", "price"], ["[data-bulk-stock]", "stock"]]) {
+      const input = form.querySelector(selector);
+      if (input.value !== "") form.querySelectorAll(`[data-variant-row] [name="${name}"]`).forEach((el) => { el.value = input.value; });
+    }
+  }
   if (event.target.closest("[data-create-product]")) {
     showProductCreate();
     return;
@@ -703,7 +730,7 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.matches("[data-clear-image]")) {
     const uploader = event.target.closest(".image-uploader");
-    uploader.querySelector('input[type="hidden"]').value = "";
+    uploader.querySelector('input[name$="ImageUrl"], input[name="imageUrl"]').value = "";
     const fileInput = uploader.querySelector('input[type="file"]');
     fileInput.value = "";
     uploader.querySelector("[data-image-preview]").outerHTML =
@@ -775,9 +802,11 @@ document.addEventListener("submit", async (event) => {
 
   if (event.target.matches(".product-edit-form")) {
     event.preventDefault();
+    if (event.target.dataset.saving) return;
     const productId = event.target.dataset.productId;
     const formData = new FormData(event.target);
-    const imageUrl = await productImageFromForm(event.target, formData);
+    event.target.dataset.saving = "true";
+    event.target.inert = true;
 
     try {
       await requestJson(`/api/admin/products/${encodeURIComponent(productId)}`, {
@@ -786,7 +815,7 @@ document.addEventListener("submit", async (event) => {
         body: JSON.stringify({
           categoryId: formData.get("categoryId"),
           name: formData.get("name"),
-          imageUrl,
+          ...await ProductEditor.collect(event.target),
           description: formData.get("description"),
           variants: await collectVariantsWithImages(event.target.querySelector(".variant-editor"))
         })
@@ -797,7 +826,7 @@ document.addEventListener("submit", async (event) => {
       showProductNotice("已成功");
     } catch (error) {
       alert(error.message);
-    }
+    } finally { delete event.target.dataset.saving; event.target.inert = false; }
   }
 });
 
@@ -859,6 +888,16 @@ document.addEventListener("drop", (event) => {
 document.addEventListener("dragend", cleanupVariantDrag);
 
 document.addEventListener("change", async (event) => {
+  if (event.target.matches('[name="option1"], [name="option2"]')) {
+    const row = event.target.closest("[data-variant-row]");
+    const name = [row.querySelector('[name="option1"]').value, row.querySelector('[name="option2"]').value].map((v) => v.trim()).filter(Boolean).join(" / ");
+    if (name) row.querySelector('[name="variantName"]').value = name;
+  }
+  if (event.target.matches('[name="variantImageUrl"]')) {
+    const uploader = event.target.closest(".image-uploader");
+    uploader.querySelector('input[type="file"]').value = "";
+    uploader.querySelector("[data-image-preview]").outerHTML = imagePreviewMarkup(event.target.value);
+  }
   if (event.target.matches("[data-select-product]")) {
     const productId = event.target.dataset.selectProduct;
     if (event.target.checked) {
@@ -915,6 +954,7 @@ productSearchResetEl?.addEventListener("click", () => {
   renderCatalog();
 });
 
+document.querySelector("#newProductFields").innerHTML = ProductEditor.fields();
 newVariantsEl.innerHTML = variantRow();
 loadCatalog().catch((error) => {
   catalogEditorEl.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;

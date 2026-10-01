@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>商品管理</title>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/product-editor.css?v=20261001">
   </head>
-  <body>
+  <body class="listing-workspace">
     <header class="app-header">
       <div>
         <p class="eyebrow">Admin Products</p>
@@ -43,18 +44,10 @@
               <input name="name" placeholder="例如 雲朵厚底拖鞋" required>
             </label>
             <label>
-              商品圖片
-              <span class="image-uploader">
-                <span class="image-preview empty" data-image-preview>尚未上傳</span>
-                <input type="file" name="imageFile" accept="image/*">
-                <input type="hidden" name="imageUrl">
-                <button type="button" data-clear-image>刪除圖片</button>
-              </span>
-            </label>
-            <label>
               商品說明
               <textarea name="description" rows="3"></textarea>
             </label>
+            <div id="newProductFields"></div>
             <div id="newVariants" class="variant-editor"></div>
             <button type="button" data-add-variant>新增品項</button>
             <button type="submit">新增商品</button>
@@ -81,6 +74,7 @@
     </main>
 
     <script src="/admin-common.js"></script>
-    <script src="/admin.js"></script>
+    <script src="/product-editor.js?v=20261001"></script>
+    <script src="/admin.js?v=20261001"></script>
   </body>
 </html>

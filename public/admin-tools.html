@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>匯入同步工具</title>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/product-editor.css?v=20261001">
   </head>
-  <body>
+  <body class="listing-workspace">
     <header class="app-header">
       <div>
         <p class="eyebrow">Admin Tools</p>
@@ -39,18 +40,18 @@
 
         <section class="editor-panel">
           <h2>Excel 大量上架</h2>
-          <p class="muted">欄位：分類、子分類、商品名稱、商品說明、商品圖片網址、款式、品項條碼、售價、數量、品項圖片網址、是否上架。賣場固定只有一個，不用再填賣場名稱。</p>
-        <a class="cart-link" href="/product-import-template.xlsx?v=20260930" download="商品大量上架範本.xlsx">下載上架範本</a>
+          <a class="cart-link" href="/product-import-template.xlsx?v=20261001" download="商品大量上架範本.xlsx">下載上架範本</a>
           <form id="productImportForm" class="order-form">
             <label>
               Excel 檔案
               <input type="file" name="productFile" accept=".xlsx,.xls" required>
             </label>
-            <button type="submit">匯入大量上架</button>
+            <button type="submit">讀取並預覽</button>
             <p id="productImportMessage" class="message"></p>
           </form>
         </section>
 
+        <section id="productImportPreview" class="import-preview hidden" aria-label="商品匯入預覽"></section>
         <section class="editor-panel">
           <h2>墨筆克線上同步庫存</h2>
           <p class="muted">每小時會自動同步一次，也可以手動立即同步。庫存會用墨筆克匯出的可用庫存減掉需求。</p>
@@ -85,6 +86,7 @@
     </main>
 
     <script src="/admin-common.js"></script>
-    <script src="/admin-tools.js"></script>
+    <script src="/product-editor.js?v=20261001"></script>
+    <script src="/admin-tools.js?v=20261001"></script>
   </body>
 </html>

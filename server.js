@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 import XLSX from "xlsx";
 import { fileURLToPath } from "url";
+import { imageValue, productMedia, productMetadata, catalogRevision, parseImportRows, applyProductImport } from "./scripts/product-fields.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -390,6 +391,7 @@ app.post("/api/admin/chats/:buyerId/messages", requireAdminApi, async (req, res)
 
 app.use(["/admin.html", "/admin-market.html", "/admin-categories.html", "/admin-layout.html", "/admin-chat.html", "/admin-tools.html", "/admin-orders.html", "/admin-stats.html"], requireAdminPage);
 app.use("/api/admin", requireAdminApi);
+app.use("/uploads/product-images", express.static(path.join(dataDir, "product-images"), { immutable: true, maxAge: "1y", dotfiles: "deny" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 async function ensureStore() {
@@ -685,6 +687,8 @@ function normalizeCatalog(catalog) {
     market.products = Array.isArray(market.products) ? market.products : [];
     for (const product of market.products) {
       product.categoryId = activeCategoryIds.has(product.categoryId) ? product.categoryId : fallbackCategoryId;
+      product.isActive = product.isActive !== false;
+      product.imageUrls = Array.isArray(product.imageUrls) ? product.imageUrls : [product.imageUrl].filter(Boolean);
       product.variants = Array.isArray(product.variants) ? product.variants : [];
       for (const variant of product.variants) {
         const stock = Number(variant.stock);
@@ -1080,7 +1084,7 @@ async function replyMessage(replyToken, messages) {
 function normalizeVariant(input, existingId) {
   const name = String(input.name || "").trim();
   const barcode = String(input.barcode || "").trim();
-  const imageUrl = String(input.imageUrl || "").trim();
+  const imageUrl = imageValue(input.imageUrl);
   const price = Number(input.price);
   const stock = Number(input.stock);
 
@@ -1094,6 +1098,7 @@ function normalizeVariant(input, existingId) {
     name,
     barcode,
     imageUrl,
+    options: (Array.isArray(input.options) ? input.options : []).slice(0, 2).map((v) => String(v || "").trim()),
     price: Math.round(price),
     stock
   };
@@ -1102,18 +1107,20 @@ function normalizeVariant(input, existingId) {
 function normalizeProduct(input, existingId) {
   const name = String(input.name || "").trim();
   const categoryId = String(input.categoryId || "").trim();
-  const imageUrl = String(input.imageUrl || "").trim();
+  const media = productMedia(input);
   const description = String(input.description || "").trim();
   const variants = Array.isArray(input.variants) ? input.variants : [];
 
   if (!name) throw new Error("請填寫商品名稱");
   if (variants.length === 0) throw new Error("請至少建立一個品項");
+  if (new Set(variants.map((v) => String(v.barcode || "").trim().toUpperCase())).size !== variants.length) throw new Error("同一商品的品項條碼不可重複");
 
   return {
     id: existingId || input.id || makeId("product"),
     name,
     categoryId,
-    imageUrl,
+    ...media,
+    ...productMetadata(input),
     description,
     variants: variants.map((variant) => normalizeVariant(variant, variant.id))
   };
@@ -1121,7 +1128,7 @@ function normalizeProduct(input, existingId) {
 
 function findCatalogItem(catalog, marketId, productId, variantId) {
   const market = catalog.markets.find((entry) => entry.id === marketId && entry.isActive !== false);
-  const product = market?.products.find((entry) => entry.id === productId);
+  const product = market?.products.find((entry) => entry.id === productId && entry.isActive !== false);
   const variant = product?.variants.find((entry) => entry.id === variantId);
   return { market, product, variant };
 }
@@ -1733,7 +1740,7 @@ app.get("/api/markets", async (_req, res) => {
   const activeMarkets = catalog.markets.filter((market) => market.isActive !== false);
   res.json({
     categories: catalog.categories.filter((category) => category.isActive !== false),
-    markets: activeMarkets.length ? activeMarkets : catalog.markets.slice(0, 1)
+    markets: (activeMarkets.length ? activeMarkets : catalog.markets.slice(0, 1)).map((market) => ({ ...market, products: market.products.filter((p) => p.isActive !== false) }))
   });
 });
 
@@ -1743,6 +1750,27 @@ app.get("/api/store-layout", async (_req, res) => {
 
 app.get("/api/admin/catalog", async (_req, res) => {
   res.json(await readCatalog());
+});
+
+app.post("/api/admin/product-images", async (req, res) => {
+  try {
+    const value = imageValue(req.body.dataUrl);
+    const match = /^data:image\/(png|jpeg|gif|webp);base64,([a-z0-9+/=\s]+)$/i.exec(value);
+    if (!match) throw new Error("請選擇圖片檔案");
+    const buffer = Buffer.from(match[2], "base64");
+    if (!buffer.length || buffer.length > 2 * 1024 * 1024) throw new Error("每張圖片不可超過 2 MB");
+    const type = match[1].toLowerCase();
+    const valid = type === "png" ? buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+      : type === "jpeg" ? buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255
+      : type === "gif" ? /^GIF8[79]a$/.test(buffer.subarray(0, 6).toString())
+      : buffer.subarray(0, 4).toString() === "RIFF" && buffer.subarray(8, 12).toString() === "WEBP";
+    if (!valid) throw new Error("圖片內容與格式不符");
+    const filename = `${crypto.createHash("sha256").update(buffer).digest("hex")}.${type === "jpeg" ? "jpg" : type}`;
+    const directory = path.join(dataDir, "product-images");
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, filename), buffer);
+    res.json({ imageUrl: `/uploads/product-images/${filename}` });
+  } catch (error) { res.status(400).json({ message: error.message }); }
 });
 
 app.get("/api/admin/store-layout", async (_req, res) => {
@@ -1959,7 +1987,10 @@ app.put("/api/admin/products/:productId", async (req, res) => {
   if (!market || index < 0) return res.status(404).json({ message: "找不到商品" });
 
   try {
-    market.products[index] = normalizeProduct(req.body, req.params.productId);
+    const previous = market.products[index];
+    const input = { ...previous, ...req.body };
+    if (Object.hasOwn(req.body, "imageUrl") && !Object.hasOwn(req.body, "imageUrls")) input.imageUrls = [req.body.imageUrl, ...(previous.imageUrls || []).slice(1)].filter(Boolean);
+    market.products[index] = normalizeProduct(input, req.params.productId);
     await writeCatalog(catalog);
     res.json({ product: market.products[index] });
   } catch (error) {
@@ -3379,116 +3410,27 @@ function applyInventoryItems(catalog, items) {
 }
 
 app.post("/api/admin/products/import", async (req, res) => {
-  const { fileBase64 } = req.body;
-  if (!fileBase64) return res.status(400).json({ message: "請選擇 Excel 檔案" });
-
-  let rows;
   try {
-    const buffer = Buffer.from(String(fileBase64).split(",").pop(), "base64");
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-  } catch {
-    return res.status(400).json({ message: "Excel 檔案讀取失敗" });
-  }
-
-  const parsed = parseProductImportRows(rows);
-  if (parsed.error) return res.status(400).json({ message: parsed.error });
-
-  const catalog = await readCatalog();
-  const market = catalog.markets[0];
-  let createdCategories = 0;
-  let createdProducts = 0;
-  let createdVariants = 0;
-  let updatedVariants = 0;
-
-  for (const item of parsed.items) {
-    let category = null;
-    if (item.categoryName) {
-      category = catalog.categories.find((entry) => entry.name.trim() === item.categoryName && !entry.parentId);
-      if (!category) {
-        category = {
-          id: makeId("category"),
-          name: item.categoryName,
-          imageUrl: "",
-          isActive: true,
-          parentId: "",
-          sortOrder: catalog.categories.length
-        };
-        catalog.categories.push(category);
-        createdCategories += 1;
-      }
+    let rows = req.body.rows;
+    if (!rows) {
+      if (!req.body.fileBase64) throw new Error("請選擇 Excel 檔案");
+      const buffer = Buffer.from(String(req.body.fileBase64).split(",").pop(), "base64");
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
     }
-    category ||= catalog.categories[0];
-    if (item.subCategoryName) {
-      let subCategory = catalog.categories.find((entry) => (
-        entry.name.trim() === item.subCategoryName
-        && entry.parentId === category.id
-      ));
-      if (!subCategory) {
-        subCategory = {
-          id: makeId("category"),
-          name: item.subCategoryName,
-          imageUrl: "",
-          isActive: true,
-          parentId: category.id,
-          sortOrder: catalog.categories.length
-        };
-        catalog.categories.push(subCategory);
-        createdCategories += 1;
-      }
-      category = subCategory;
+    const parsed = parseProductImportRows(rows);
+    if (parsed.error) throw new Error(parsed.error);
+    const catalog = await readCatalog();
+    const revision = catalogRevision(catalog);
+    if (!req.body.preview && req.body.expectedRevision && req.body.expectedRevision !== revision) {
+      return res.status(409).json({ message: "商品或庫存已變更，請重新預覽再匯入" });
     }
-    const categoryId = category.id;
-
-    market.isActive = item.isActive;
-    let product = market.products.find((entry) => entry.name.trim() === item.productName && entry.categoryId === categoryId);
-    if (!product) {
-      product = {
-        id: makeId("product"),
-        name: item.productName,
-        categoryId,
-        imageUrl: item.productImageUrl,
-        description: item.productDescription,
-        variants: []
-      };
-      market.products.push(product);
-      createdProducts += 1;
-    } else {
-      product.categoryId = categoryId;
-      product.description = item.productDescription || product.description || "";
-      product.imageUrl = item.productImageUrl || product.imageUrl || "";
-    }
-
-    const variant = product.variants.find((entry) => entry.barcode.trim().toUpperCase() === item.barcode.toUpperCase());
-    if (variant) {
-      variant.name = item.variantName;
-      variant.price = item.price;
-      variant.stock = item.stock;
-      variant.imageUrl = item.variantImageUrl || variant.imageUrl || "";
-      updatedVariants += 1;
-    } else {
-      product.variants.push({
-        id: makeId("variant"),
-        name: item.variantName,
-        barcode: item.barcode,
-        imageUrl: item.variantImageUrl,
-        price: item.price,
-        stock: item.stock
-      });
-      createdVariants += 1;
-    }
-  }
-
-  await writeCatalog(catalog);
-  res.json({
-    importedRows: parsed.items.length,
-    createdMarkets: 0,
-    createdCategories,
-    createdProducts,
-    createdVariants,
-    updatedVariants
-  });
+    // Apply to the detached catalog first. Validation failure never writes a partial batch.
+    const result = applyProductImport(catalog, parsed.items, makeId);
+    if (req.body.preview) return res.json({ ...result, rows: parsed.rows, revision, preview: true });
+    await writeCatalog(catalog);
+    res.json(result);
+  } catch (error) { res.status(400).json({ message: error.message || "Excel 檔案讀取失敗" }); }
 });
 
 const inventoryBarcodeHeaders = [
@@ -4237,73 +4179,7 @@ async function exportMallbicInventoryWorkbook({ account, password }) {
 }
 
 function parseProductImportRows(rows) {
-  const requiredHeaders = ["商品名稱", "款式", "品項條碼", "售價", "數量"];
-  const headerIndex = rows.findIndex((row) => {
-    const cells = row.map((cell) => String(cell).trim());
-    return requiredHeaders.every((header) => cells.includes(header));
-  });
-
-  if (headerIndex < 0) {
-    return { error: `找不到必要欄位：${requiredHeaders.join("、")}` };
-  }
-
-  const headers = rows[headerIndex].map((cell) => String(cell).trim());
-  const indexOf = (name) => headers.indexOf(name);
-  const marketIndex = indexOf("賣場名稱");
-  const categoryIndex = indexOf("分類");
-  const subCategoryIndex = indexOf("子分類");
-  const productIndex = indexOf("商品名稱");
-  const descriptionIndex = indexOf("商品說明");
-  const productImageIndex = indexOf("商品圖片網址");
-  const variantIndex = indexOf("款式");
-  const barcodeIndex = indexOf("品項條碼");
-  const priceIndex = indexOf("售價");
-  const stockIndex = indexOf("數量");
-  const variantImageIndex = indexOf("品項圖片網址");
-  const activeIndex = indexOf("是否上架");
-
-  const items = [];
-  for (const row of rows.slice(headerIndex + 1)) {
-    const marketName = marketIndex >= 0 ? String(row[marketIndex] || "").trim() : "";
-    const categoryName = categoryIndex >= 0 ? String(row[categoryIndex] || "").trim() : "";
-    const subCategoryName = subCategoryIndex >= 0 ? String(row[subCategoryIndex] || "").trim() : "";
-    const productName = String(row[productIndex] || "").trim();
-    const variantName = String(row[variantIndex] || "").trim();
-    const barcode = String(row[barcodeIndex] || "").trim();
-    const price = Number(row[priceIndex]);
-    const stock = Number(row[stockIndex]);
-
-    if (!categoryName && !marketName && !productName && !variantName && !barcode) continue;
-    if (!productName || !variantName || !barcode) {
-      return { error: `資料缺少必要欄位：${barcode || productName || categoryName || "空白列"}` };
-    }
-    if (!Number.isFinite(price) || price < 0) return { error: `${barcode} 售價格式錯誤` };
-    if (!Number.isInteger(stock) || stock < 0) return { error: `${barcode} 數量格式錯誤` };
-
-    items.push({
-      marketName,
-      categoryName,
-      subCategoryName,
-      productName,
-      productDescription: descriptionIndex >= 0 ? String(row[descriptionIndex] || "").trim() : "",
-      productImageUrl: productImageIndex >= 0 ? String(row[productImageIndex] || "").trim() : "",
-      variantName,
-      barcode,
-      price: Math.round(price),
-      stock,
-      variantImageUrl: variantImageIndex >= 0 ? String(row[variantImageIndex] || "").trim() : "",
-      isActive: activeIndex >= 0 ? parseActiveValue(row[activeIndex]) : true
-    });
-  }
-
-  if (items.length === 0) return { error: "Excel 沒有可匯入的商品資料" };
-  return { items };
-}
-
-function parseActiveValue(value) {
-  const text = String(value || "").trim().toLowerCase();
-  if (!text) return true;
-  return ["是", "上架", "true", "1", "yes", "y"].includes(text);
+  return parseImportRows(rows);
 }
 
 app.get("/api/orders", requireAdminApi, async (_req, res) => {

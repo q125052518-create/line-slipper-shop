@@ -132,32 +132,89 @@ inventoryImportFormEl.addEventListener("submit", async (event) => {
   inventoryImportFormEl.reset();
 });
 
+let importPreview = null;
+let importPage = 0;
+const importPreviewEl = document.querySelector("#productImportPreview");
+const importEscape = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+const isImageHeader = (header) => /圖片/.test(header);
+function renderImportPreview() {
+  if (!importPreview) return;
+  const { rows } = importPreview;
+  const start = importPage * 50 + 1, end = Math.min(rows.length, start + 50);
+  importPreviewEl.classList.remove("hidden");
+  importPreviewEl.innerHTML = `<div class="import-preview-toolbar"><h2>匯入預覽</h2>
+    <span>${rows.length - 1} 個品項</span><button type="button" data-recheck-import>重新檢查</button>
+    <button type="button" data-confirm-import ${importPreview.dirty ? "disabled" : ""}>確認匯入</button></div>
+    <p data-import-summary aria-live="polite">${importPreview.dirty ? "內容已修改，尚未檢查" : `新增商品 ${importPreview.createdProducts} 件，新增品項 ${importPreview.createdVariants} 個，更新品項 ${importPreview.updatedVariants} 個`}</p>
+    <div class="import-preview-scroll"><table><thead><tr><th>列</th>${rows[0].map((h) => `<th>${importEscape(h)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.slice(start, end).map((row, offset) => `<tr><td>${start + offset + 1}</td>${rows[0].map((header, col) => `<td>
+      <input aria-label="${importEscape(header)} 第 ${start + offset + 1} 列" data-cell-row="${start + offset}" data-cell-column="${col}" value="${importEscape(row[col])}">
+      ${isImageHeader(header) ? `<button type="button" class="preview-image" data-enlarge-image="${importEscape(row[col])}" ${row[col] ? "" : "hidden"}><img src="${importEscape(row[col])}" alt="圖片預覽" loading="lazy"></button><input type="file" aria-label="上傳${importEscape(header)} 第 ${start + offset + 1} 列" accept="image/png,image/jpeg,image/gif,image/webp" data-import-image-row="${start + offset}" data-import-image-col="${col}">` : ""}
+      </td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <div class="import-preview-toolbar"><button type="button" data-import-page="-1" ${importPage === 0 ? "disabled" : ""}>上一頁</button><span>${start}–${end - 1} / ${rows.length - 1}</span><button type="button" data-import-page="1" ${end >= rows.length ? "disabled" : ""}>下一頁</button></div>`;
+}
+async function importRequest(body) {
+  const response = await fetch("/api/admin/products/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "匯入失敗");
+  return data;
+}
+function markImportDirty() {
+  importPreview.dirty = true;
+  importPreviewEl.querySelector("[data-confirm-import]").disabled = true;
+  importPreviewEl.querySelector("[data-import-summary]").textContent = "內容已修改，尚未檢查";
+}
 productImportFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
-  productImportMessageEl.textContent = "匯入中...";
-
   const file = productImportFormEl.elements.productFile.files[0];
-  if (!file) {
-    productImportMessageEl.textContent = "請選擇 Excel 檔案";
-    return;
-  }
-
-  const fileBase64 = await readFileAsDataUrl(file);
-  const response = await fetch("/api/admin/products/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileBase64 })
-  });
-  const data = await response.json();
-
-  if (!response.ok) {
-    productImportMessageEl.textContent = data.message || "匯入失敗";
-    return;
-  }
-
-  productImportMessageEl.textContent =
-    `匯入 ${data.importedRows} 列，新增分類 ${data.createdCategories || 0} 個，新增商品 ${data.createdProducts} 個，新增品項 ${data.createdVariants} 個，更新品項 ${data.updatedVariants} 個`;
-  productImportFormEl.reset();
+  if (!file) return;
+  const button = productImportFormEl.querySelector("button[type=submit]");
+  button.disabled = true;
+  importPreview = null; importPreviewEl.classList.add("hidden");
+  productImportMessageEl.textContent = "讀取預覽中…";
+  try {
+    if (file.size > 8 * 1024 * 1024) throw new Error("Excel 檔案不可超過 8 MB");
+    importPreview = await importRequest({ fileBase64: await readFileAsDataUrl(file), preview: true });
+    importPage = 0; renderImportPreview();
+    productImportMessageEl.textContent = "預覽完成，尚未寫入商品";
+  } catch (error) { productImportMessageEl.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+importPreviewEl.addEventListener("input", (event) => {
+  if (!event.target.matches("[data-cell-row]")) return;
+  importPreview.rows[Number(event.target.dataset.cellRow)][Number(event.target.dataset.cellColumn)] = event.target.value;
+  markImportDirty();
+});
+importPreviewEl.addEventListener("change", async (event) => {
+  const input = event.target;
+  if (!input.matches("[data-import-image-row]") || !input.files[0]) return;
+  markImportDirty(); input.disabled = true;
+  const recheck = importPreviewEl.querySelector("[data-recheck-import]"); recheck.disabled = true;
+  try {
+    const url = await ProductEditor.upload(input.files[0]);
+    importPreview.rows[Number(input.dataset.importImageRow)][Number(input.dataset.importImageCol)] = url;
+    renderImportPreview();
+  } catch (error) { productImportMessageEl.textContent = error.message; }
+  finally { input.disabled = false; recheck.disabled = false; }
+});
+importPreviewEl.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  if (button.matches("[data-import-page]")) { importPage += Number(button.dataset.importPage); renderImportPreview(); return; }
+  if (!button.matches("[data-recheck-import], [data-confirm-import]")) return;
+  const preview = button.matches("[data-recheck-import]");
+  if (!preview && (importPreview.dirty || !confirm("確認將預覽商品與品項寫入第一站賣場？"))) return;
+  importPreviewEl.inert = true;
+  productImportMessageEl.textContent = preview ? "檢查中…" : "匯入中…";
+  try {
+    const data = await importRequest({ rows: importPreview.rows, preview, expectedRevision: importPreview.revision });
+    if (preview) { importPreview = data; renderImportPreview(); productImportMessageEl.textContent = "檢查通過，尚未寫入商品"; }
+    else {
+      importPreview = null; importPreviewEl.innerHTML = ""; importPreviewEl.classList.add("hidden"); productImportFormEl.reset();
+      productImportMessageEl.textContent = `完成：新增商品 ${data.createdProducts} 件、新增品項 ${data.createdVariants} 個、更新品項 ${data.updatedVariants} 個`;
+    }
+  } catch (error) { productImportMessageEl.textContent = error.message; if (importPreview) markImportDirty(); }
+  finally { importPreviewEl.inert = false; }
 });
 
 mallbicSyncButtonEl.addEventListener("click", async () => {

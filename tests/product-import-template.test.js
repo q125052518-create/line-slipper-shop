@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
-import vm from "node:vm";
+import { parseImportRows, productImportHeaders } from "../scripts/product-fields.js";
 import XLSX from "xlsx";
 
 const templateUrl = new URL("../public/product-import-template.xlsx", import.meta.url);
@@ -15,7 +15,8 @@ test("download template preserves Chinese headers and typed example data", async
   assert.deepEqual(workbook.SheetNames, ["Import"]);
   const sheet = workbook.Sheets.Import;
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-  assert.deepEqual(rows[0], expectedHeaders);
+  assert.deepEqual(rows[0].slice(0, 11), expectedHeaders);
+  assert.deepEqual(rows[0], productImportHeaders);
   assert.equal(rows.length, 3);
   assert.doesNotMatch(JSON.stringify(rows), /\?{2,}|\uFFFD/);
   assert.equal(sheet.C2.v, "範例拖鞋一");
@@ -26,12 +27,7 @@ test("download template preserves Chinese headers and typed example data", async
     assert.equal(sheet[address].t, "n", `${address} must remain numeric`);
   }
 
-  // Run only the production pure parser, without booting the server or workers.
-  const source = await fs.readFile(new URL("../server.js", import.meta.url), "utf8");
-  const parser = source.match(/function parseProductImportRows\(rows\) \{[\s\S]*?\nfunction parseActiveValue\(value\) \{[\s\S]*?\n\}/);
-  assert.ok(parser, "Product import parser must exist");
-  const context = { rows };
-  vm.runInNewContext(`${parser[0]}\nresult = parseProductImportRows(rows);`, context, { timeout: 1000 });
+  const context = { result: parseImportRows(rows) };
   assert.equal(context.result.error, undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(context.result.items.map((item) => ({
     productName: item.productName, barcode: item.barcode,
