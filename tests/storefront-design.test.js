@@ -11,7 +11,7 @@ const asset = '/assets/store/brand-avatar.jpg';
 const fixture = {
   categories: [{ id: 'cards', name: '卡膜卡套', isActive: true }],
   markets: [{ id: 'shop', name: '曜鑰購物', description: '卡膜卡套・出卡包材・活頁卡冊・飾品襪子', imageUrl: asset, products: [
-    { id: 'sleeve', name: '透明小卡保護套', categoryId: 'cards', imageUrl: asset, variants: [{ id: 'pink', name: '粉色', price: 25, stock: 8, imageUrl: asset }] }
+    { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [{ id: 'pink', name: '粉色', price: 25, stock: 8, imageUrl: asset }] }
   ] }]
 };
 const layoutFixture = { blocks: [
@@ -80,6 +80,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     }
     await page.locator('.store-strip-product-card').first().click();
     assert.equal(await page.locator('.product-detail-dialog').isVisible(), true);
+    assert.equal(await page.locator('.product-detail-description p').textContent(), product.description || '精選商品');
     await page.locator(`[data-select-variant="${product.id}"][data-variant-id="${variant.id}"]`).last().click();
     await page.locator('.product-detail-dialog [data-add-product]').click();
     assert.equal(await page.locator('#cartCount').textContent(), '1');
@@ -88,6 +89,8 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     assert.equal(await page.locator('#productShell').isVisible(), true);
     assert.equal(await page.locator('#storeHero').isVisible(), false);
     assert.equal(await page.locator('#products [data-open-product]').count(), 1);
+    assert.equal(await page.locator('#products .shop-product-body h3').textContent(), product.name);
+    assert.equal(await page.locator('#products .shop-product-body > p:not(.shop-product-category)').count(), 0, 'Product cards show the title, not the description');
     await page.locator('#productSearch').fill('no-matching-product-012345');
     assert.equal(await page.locator('#products .empty').textContent(), '沒有符合的商品');
     await page.locator('[data-store-tab="categories"]').click();

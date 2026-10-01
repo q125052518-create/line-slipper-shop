@@ -569,7 +569,6 @@ function renderProducts() {
         <div class="shop-product-body">
           <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
           <h3>${escapeHtml(product.name)}</h3>
-          ${product.description ? `<p>${escapeHtml(product.description)}</p>` : ""}
           <div class="shop-variant-strip" role="list" aria-label="${escapeHtml(product.name)}品項">
             ${(product.variants || []).map((variant) => {
               const isSelected = selected?.id === variant.id;
