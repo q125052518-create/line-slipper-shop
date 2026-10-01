@@ -18,7 +18,7 @@
 .listing-workspace .media-tile-controls button { background: #f5e5ed !important; color: #73314b !important; }
 .listing-workspace .secondary-button { background: #edf2f0 !important; color: #33574c !important; }
 .listing-workspace .admin-menu-link.is-current { background: #fbe7ef; color: #91365a; }
-.listing-save-bar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; background: #ffffffee; border-top: 1px solid #eedce4; padding: 10px 0; z-index: 2; }
+.listing-save-bar { display: flex; justify-content: flex-end; background: #fff; border-top: 1px solid #eedce4; padding: 10px 0; }
 .media-tile-controls button { min-height: 28px; width: 28px; padding: 2px; background: #f6edf1; color: #713a4f; border: 0; }
 .gallery-inputs, .variant-bulk { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 12px; margin-top: 12px; }
 .gallery-inputs input { min-width: 0; max-width: 100%; }
