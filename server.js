@@ -624,16 +624,6 @@ function normalizeCatalog(catalog) {
       sortOrder: Number.isFinite(Number(category.sortOrder)) ? Number(category.sortOrder) : index
     }))
     .filter((category) => category.id && category.name);
-  if (catalog.categories.length === 0) {
-    catalog.categories.push({
-      id: "default-category",
-      name: "一般商品",
-      imageUrl: "",
-      isActive: true,
-      parentId: "",
-      sortOrder: 0
-    });
-  }
   const categoryIds = new Set(catalog.categories.map((category) => category.id));
   for (const category of catalog.categories) {
     category.parentId = category.parentId && categoryIds.has(category.parentId) && category.parentId !== category.id
@@ -677,7 +667,6 @@ function normalizeCatalog(catalog) {
   catalog.markets = [mainMarket];
 
   const activeCategoryIds = new Set(catalog.categories.map((category) => category.id));
-  const fallbackCategoryId = catalog.categories[0].id;
   for (const market of catalog.markets) {
     market.id = String(market.id || "main-market").trim() || "main-market";
     market.name = String(market.name || "拖鞋賣場").trim() || "拖鞋賣場";
@@ -686,7 +675,7 @@ function normalizeCatalog(catalog) {
     market.imageUrl = String(market.imageUrl || "").trim();
     market.products = Array.isArray(market.products) ? market.products : [];
     for (const product of market.products) {
-      product.categoryId = activeCategoryIds.has(product.categoryId) ? product.categoryId : fallbackCategoryId;
+      product.categoryId = activeCategoryIds.has(product.categoryId) ? product.categoryId : "";
       product.isActive = product.isActive !== false;
       product.imageUrls = Array.isArray(product.imageUrls) ? product.imageUrls : [product.imageUrl].filter(Boolean);
       product.variants = Array.isArray(product.variants) ? product.variants : [];
@@ -1878,20 +1867,32 @@ app.put("/api/admin/categories/:categoryId", async (req, res) => {
   res.json({ category });
 });
 
+app.delete("/api/admin/categories", async (req, res) => {
+  const catalog = await readCatalog();
+  if (!req.body?.expectedRevision || req.body.expectedRevision !== catalogRevision(catalog)) {
+    return res.status(409).json({ message: "商品或分類已變更，請重新讀取後再清空" });
+  }
+  const deletedCount = catalog.categories.length;
+  catalog.categories = [];
+  for (const market of catalog.markets) {
+    for (const product of market.products) product.categoryId = "";
+  }
+  await writeCatalog(catalog);
+  res.json({ deletedCount });
+});
+
 app.delete("/api/admin/categories/:categoryId", async (req, res) => {
   const catalog = await readCatalog();
-  if (catalog.categories.length <= 1) return res.status(400).json({ message: "至少要保留一個分類" });
   const exists = catalog.categories.some((entry) => entry.id === req.params.categoryId);
   if (!exists) return res.status(404).json({ message: "找不到分類" });
 
   catalog.categories = catalog.categories.filter((entry) => entry.id !== req.params.categoryId);
-  const fallbackCategoryId = catalog.categories[0]?.id || "default-category";
   for (const category of catalog.categories) {
     if (category.parentId === req.params.categoryId) category.parentId = "";
   }
   for (const market of catalog.markets) {
     for (const product of market.products || []) {
-      if (product.categoryId === req.params.categoryId) product.categoryId = fallbackCategoryId;
+      if (product.categoryId === req.params.categoryId) product.categoryId = "";
     }
   }
   await writeCatalog(catalog);

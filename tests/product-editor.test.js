@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { chromium } from "playwright";
-import { parseImportRows, applyProductImport, productMedia } from "../scripts/product-fields.js";
+import { parseImportRows, applyProductImport, productMedia, catalogRevision } from "../scripts/product-fields.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const emptyCatalog = () => ({ categories: [{ id: "cat", name: "測試分類", parentId: "", isActive: true }], markets: [{ id: "shop", name: "第一站測試", isActive: true, products: [] }] });
@@ -157,5 +157,55 @@ test("editor, import preview and storefront work using isolated data", async (t)
   assert.equal(created.product.variants.length, 4);
   assert.equal(created.product.variants[0].price, 123);
   assert.equal(created.product.variants[3].name, "粉色 / L");
+
+  const beforeClear = (await api("/api/admin/catalog", null, "GET")).data;
+  assert.equal((await api("/api/admin/categories", {}, "DELETE")).status, 409);
+  assert.equal((await api("/api/admin/categories", { expectedRevision: "stale" }, "DELETE")).status, 409);
+  assert.deepEqual((await api("/api/admin/catalog", null, "GET")).data, beforeClear);
+  const cleared = await api("/api/admin/categories", { expectedRevision: catalogRevision(beforeClear) }, "DELETE");
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.data.deletedCount, beforeClear.categories.length);
+  const expectedClear = structuredClone(beforeClear);
+  expectedClear.categories = [];
+  for (const market of expectedClear.markets) for (const item of market.products) item.categoryId = "";
+  assert.deepEqual((await api("/api/admin/catalog", null, "GET")).data, expectedClear);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(directory, "catalog.json"), "utf8")), expectedClear);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 950 });
+    await page.goto(`${base}/`);
+    await page.waitForFunction(() => Number(document.querySelector("#storeProductCount").textContent) === 2);
+    assert.equal(await page.locator('[data-store-tab="categories"]').isVisible(), false);
+    await page.locator('[data-store-tab="products"]').click();
+    assert.equal(await page.locator('#products .shop-product-card').count(), 2);
+    assert.equal(await page.locator('#products .shop-product-category').count(), 0);
+    assert.equal(await page.locator('#categoryLanding [data-open-category]').count(), 1);
+    assert.equal(await page.locator('#categoryLanding [data-open-category]').getAttribute('data-open-category'), 'all');
+  }
+  await page.goto(`${base}/admin.html`);
+  await page.locator(`[data-edit-product="${product.id}"]`).first().click();
+  const categorySelect = page.locator('.product-edit-form [name="categoryId"]');
+  assert.equal(await categorySelect.inputValue(), '');
+  assert.equal(await categorySelect.evaluate(select => select.required), false);
+  const custom = await api('/api/admin/categories', {name: '自訂分類'});
+  assert.equal(custom.status, 201);
+  assert.deepEqual((await api('/api/admin/catalog', null, 'GET')).data.markets, expectedClear.markets);
+  assert.equal((await api(`/api/admin/products/${product.id}`, {categoryId: custom.data.category.id}, 'PUT')).status, 200);
+  const deleted = await fetch(`${base}/api/admin/categories/${custom.data.category.id}`, {method: 'DELETE', headers: {Cookie: cookie}});
+  assert.equal(deleted.status, 204);
+  assert.deepEqual((await api('/api/admin/catalog', null, 'GET')).data, expectedClear);
   assert.deepEqual(errors, []);
+});
+
+test('product imports work without categories and preserve unassigned products', () => {
+  const catalog = emptyCatalog();
+  catalog.categories = [];
+  const parsed = parseImportRows([headers, sample]);
+  let sequence = 0;
+  applyProductImport(catalog, parsed.items, () => `uncategorized-${++sequence}`);
+  const product = catalog.markets[0].products[0];
+  assert.equal(product.categoryId, '');
+  assert.deepEqual(catalog.categories, []);
+  catalog.categories.push({id: 'custom', name: '自訂分類', parentId: ''});
+  applyProductImport(catalog, [{...parsed.items[0], productId: product.id}], () => { throw new Error('Unexpected new item'); });
+  assert.equal(product.categoryId, '');
 });

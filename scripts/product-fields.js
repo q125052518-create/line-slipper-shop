@@ -108,22 +108,24 @@ export function applyProductImport(catalog, items, makeId) {
       }
     }
     if (item.subCategoryName) {
+      if (!category) throw new Error("請先填寫分類，再填子分類");
       let child = catalog.categories.find((c) => c.name === item.subCategoryName && c.parentId === category.id);
       if (!child) { child = { id: makeId("category"), name: item.subCategoryName, parentId: category.id, isActive: true, sortOrder: catalog.categories.length }; catalog.categories.push(child); stats.createdCategories++; }
       category = child;
     }
-    const matches = market.products.filter((p) => item.productId ? p.id === item.productId : item.sku ? p.sku === item.sku : p.name.trim() === item.productName && p.categoryId === category.id);
+    const categoryId = category?.id || "";
+    const matches = market.products.filter((p) => item.productId ? p.id === item.productId : item.sku ? p.sku === item.sku : p.name.trim() === item.productName && (p.categoryId || "") === categoryId);
     if (matches.length > 1) throw new Error(`商品無法唯一定位：${item.productName}，請填商品ID`);
     let product = matches[0];
     if (item.productId && !product) throw new Error(`找不到商品ID：${item.productId}`);
     const owner = market.products.find((p) => p.variants.some((v) => String(v.barcode).toUpperCase() === barcode));
     if (owner && owner !== product) throw new Error(`品項條碼 ${item.barcode} 已屬於 ${owner.name}，請核對商品ID／主貨號`);
     if (!product) {
-      product = { id: makeId("product"), name: item.productName, categoryId: category.id, description: "", imageUrl: "", imageUrls: [], variants: [], isActive: true };
+      product = { id: makeId("product"), name: item.productName, categoryId, description: "", imageUrl: "", imageUrls: [], variants: [], isActive: true };
       market.products.push(product); stats.createdProducts++;
     }
     const shared = { name: item.productName };
-    if (item.categoryName || item.subCategoryName || !product.categoryId) shared.categoryId = category.id;
+    if (item.categoryName || item.subCategoryName) shared.categoryId = categoryId;
     if (item.sku) shared.sku = item.sku;
     if (item.productDescription) shared.description = item.productDescription;
     if (item.imageUrls.length) Object.assign(shared, productMedia({ imageUrls: item.imageUrls }));

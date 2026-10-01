@@ -286,11 +286,11 @@ function renderCategoryOptions(select, selectedId = "") {
   select.innerHTML = categoryOptionsMarkup(selectedId);
   select.value = categories.some((category) => category.id === selectedId)
     ? selectedId
-    : categories[0]?.id || "";
+    : "";
 }
 
 function categoryOptionsMarkup(selectedId = "") {
-  return sortedCategories().map((category) => `
+  return `<option value="" ${selectedId ? "" : "selected"}>未分類</option>` + sortedCategories().map((category) => `
     <option value="${escapeHtml(category.id)}" ${category.id === selectedId ? "selected" : ""}>
       ${escapeHtml(categoryOptionLabel(category))}
     </option>
@@ -496,7 +496,7 @@ function productEditFormMarkup(product) {
       </div>
       <label>
         分類
-        <select name="categoryId" required>
+        <select name="categoryId">
           ${categoryOptionsMarkup(product.categoryId)}
         </select>
       </label>
@@ -745,7 +745,7 @@ document.addEventListener("click", async (event) => {
   }
 
   const categoryId = event.target.dataset.deleteCategory;
-  if (categoryId && confirm("確定刪除這個分類？分類內商品會改到第一個分類。")) {
+  if (categoryId && confirm("確定刪除這個分類？商品會保留，並取消此分類歸屬。")) {
     try {
       await requestJson(`/api/admin/categories/${encodeURIComponent(categoryId)}`, { method: "DELETE" });
       await loadCatalog();

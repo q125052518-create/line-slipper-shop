@@ -203,6 +203,7 @@ function productById(productId) {
 }
 
 function categoryProducts(categoryId) {
+  if (categoryId === "all") return marketProducts();
   const ids = descendantCategoryIds(categoryId);
   return marketProducts().filter((product) => ids.has(product.categoryId));
 }
@@ -300,6 +301,7 @@ function renderStoreHead() {
   storeAvatarEl.alt = storeName;
   storeProductCountEl.textContent = productCount;
   storeCategoryCountEl.textContent = categoryCount;
+  storeTabsEl.querySelector('[data-store-tab="categories"]')?.classList.toggle("hidden", categoryCount === 0);
 }
 
 function categoryNavButton(categoryId, label, count, depth = 0) {
@@ -416,7 +418,7 @@ function renderLayoutProductBlock(block, products = layoutProductsForBlock(block
           <button type="button" class="store-strip-product-card" data-open-product="${escapeHtml(product.id)}">
             <span class="store-item-media"><img class="store-item-image" src="${escapeHtml(productImage(product))}" alt="" onerror="this.src='${escapeHtml(placeholderImage(product.name))}';"></span>
             <span class="store-item-copy">
-              <span class="store-item-category">${escapeHtml(categoryName(product.categoryId))}</span>
+              ${categoryById(product.categoryId) ? `<span class="store-item-category">${escapeHtml(categoryName(product.categoryId))}</span>` : ""}
               <strong>${escapeHtml(product.name)}</strong>
               <span class="store-item-options">${(product.variants || []).length} 款規格 <span aria-hidden="true">/</span> ${productTotalStock(product) > 0 ? "有庫存" : "暫時售完"}</span>
               <span class="store-item-price">${escapeHtml(productPriceText(product))}</span>
@@ -567,7 +569,7 @@ function renderProducts() {
           ${disabled ? '<span class="soldout-badge">售完</span>' : ""}
         </div>
         <div class="shop-product-body">
-          <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
+          ${categoryById(product.categoryId) ? `<p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>` : ""}
           <h3>${escapeHtml(product.name)}</h3>
           <div class="shop-variant-strip" role="list" aria-label="${escapeHtml(product.name)}品項">
             ${(product.variants || []).map((variant) => {
@@ -659,7 +661,7 @@ function renderProductDetail(productId = state.openProductId) {
           </div>
         </div>
         <div class="product-detail-body">
-          <p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>
+          ${categoryById(product.categoryId) ? `<p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>` : ""}
           <h2>${escapeHtml(product.name)}</h2>
           <div class="product-detail-variant-list" role="list" aria-label="${escapeHtml(product.name)}品項">
             ${variants.length ? variants.map((variant) => {
