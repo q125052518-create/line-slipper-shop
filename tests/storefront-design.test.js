@@ -114,5 +114,55 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
   assert.equal(await page.locator('.store-strip-product-card').count(), 6);
   assert.equal(await page.locator('.store-product-strip.is-single').count(), 0);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+  const stockProduct = (id, prices, stocks, group = false) => ({
+    ...product, id, name: `Stock test ${group ? 'group ' : ''}${id}`,
+    variants: stocks.map((stock, index) => ({id: `${id}-${index}`, name: `Option ${index}`, stock, price: prices[index], imageUrl: asset}))
+  });
+  catalog.markets[0].products = [
+    stockProduct('out-low', [1], [0], true),
+    stockProduct('mixed', [100, 120], [0, 3], true),
+    stockProduct('out-high', [999], [0]),
+    stockProduct('in-low', [20], [2], true),
+    stockProduct('in-mid', [50], [5])
+  ];
+  const originalIds = catalog.markets[0].products.map(item => item.id);
+  const ids = selector => page.locator(selector).evaluateAll(items => items.map(item => item.dataset.openProduct));
+  const defaultOrder = ['mixed', 'in-low', 'in-mid', 'out-low', 'out-high'];
+  for (const type of ['featured-products', 'new-products', 'hot-products']) {
+    layout.blocks = [{type, title: 'Stock test', productIds: originalIds, limit: 3}];
+    await page.goto(base);
+    await page.locator('.store-strip-product-card').first().waitFor();
+    assert.equal(await page.locator('.store-strip-product-card').count(), 3);
+    assert((await ids('.store-strip-product-card')).every(id => !id.startsWith('out-')), `${type} must prioritize stock before applying its limit`);
+  }
+  layout.blocks = [{type: 'featured-products', title: 'Stock test', productIds: originalIds, limit: 5}];
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height: 950});
+    await page.goto(base);
+    await page.locator('.store-strip-product-card').first().waitFor();
+    assert.deepEqual(await ids('.store-strip-product-card'), defaultOrder);
+    await page.locator('[data-store-tab="products"]').click();
+    assert.deepEqual(await ids('#products .shop-product-card'), defaultOrder);
+    assert.equal(await page.locator('#products [data-open-product="mixed"] .soldout-badge').count(), 0, 'Another variant is still in stock');
+    assert.equal(await page.locator('#products .soldout-badge').count(), 2);
+    await page.locator('#productSort').selectOption('price-asc');
+    assert.deepEqual(await ids('#products .shop-product-card'), ['in-low', 'in-mid', 'mixed', 'out-low', 'out-high']);
+    await page.locator('#productSort').selectOption('price-desc');
+    assert.deepEqual(await ids('#products .shop-product-card'), ['mixed', 'in-mid', 'in-low', 'out-high', 'out-low']);
+    await page.locator('#productSearch').fill('Stock test group');
+    assert.deepEqual(await ids('#products .shop-product-card'), ['mixed', 'in-low', 'out-low']);
+    await page.locator('[data-store-tab="categories"]').click();
+    await page.locator('.store-directory-row').first().click();
+    assert.deepEqual(await ids('#products .shop-product-card'), ['mixed', 'in-mid', 'in-low', 'out-high', 'out-low']);
+    await page.locator('#products [data-open-product="mixed"]').click();
+    await page.locator('.product-detail-dialog [data-variant-id="mixed-0"]').click();
+    assert.equal(await page.locator('.product-detail-dialog [data-add-product]').isDisabled(), true);
+    await page.locator('.product-detail-dialog [data-variant-id="mixed-1"]').click();
+    assert.equal(await page.locator('.product-detail-dialog [data-add-product]').isEnabled(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  }
+  assert.deepEqual(catalog.markets[0].products.map(item => item.id), originalIds, 'Display sorting must not reorder source data');
   assert.deepEqual(errors, []);
 });

@@ -253,6 +253,16 @@ function productTotalStock(product) {
   return (product.variants || []).reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
 }
 
+function sortProductsForDisplay(products, order = "") {
+  return [...products].sort((a, b) => {
+    const availability = Number(productTotalStock(a) <= 0) - Number(productTotalStock(b) <= 0);
+    if (availability) return availability;
+    if (order === "price-asc") return productMinPrice(a) - productMinPrice(b);
+    if (order === "price-desc") return productMaxPrice(b) - productMaxPrice(a);
+    return 0;
+  });
+}
+
 function productSearchText(product) {
   return String(product.name || "").toLowerCase();
 }
@@ -269,14 +279,7 @@ function visibleProducts() {
     return terms.every((term) => text.includes(term));
   });
 
-  switch (productSortEl?.value) {
-    case "price-asc":
-      return products.sort((a, b) => productMinPrice(a) - productMinPrice(b));
-    case "price-desc":
-      return products.sort((a, b) => productMaxPrice(b) - productMaxPrice(a));
-    default:
-      return products;
-  }
+  return sortProductsForDisplay(products, productSortEl?.value);
 }
 
 function productPriceText(product) {
@@ -347,9 +350,9 @@ function layoutProductsForBlock(block) {
     const selected = (Array.isArray(block.productIds) ? block.productIds : [])
       .map((productId) => byId.get(productId))
       .filter(Boolean);
-    return (selected.length ? selected : marketProducts()).slice(0, limit);
+    return sortProductsForDisplay(selected.length ? selected : marketProducts()).slice(0, limit);
   }
-  if (block.type === "new-products") return [...marketProducts()].reverse().slice(0, limit);
+  if (block.type === "new-products") return sortProductsForDisplay([...marketProducts()].reverse()).slice(0, limit);
   if (block.type === "hot-products") {
     return [...marketProducts()]
       .sort((a, b) => productTotalStock(b) - productTotalStock(a))
@@ -561,12 +564,13 @@ function renderProducts() {
     const selected = selectedVariant(product);
     const imageUrl = productListImage(product);
     const disabled = !selected || selected.stock <= 0;
+    const soldOut = productTotalStock(product) <= 0;
 
     return `
       <article class="shop-product-card" role="button" tabindex="0" data-open-product="${escapeHtml(product.id)}">
         <div class="shop-product-image-wrap">
           <img class="product-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}" data-product-image="${escapeHtml(product.id)}">
-          ${disabled ? '<span class="soldout-badge">售完</span>' : ""}
+          ${soldOut ? '<span class="soldout-badge">售完</span>' : ""}
         </div>
         <div class="shop-product-body">
           ${categoryById(product.categoryId) ? `<p class="shop-product-category">${escapeHtml(categoryName(product.categoryId))}</p>` : ""}
