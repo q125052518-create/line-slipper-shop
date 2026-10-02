@@ -1,4 +1,5 @@
 const CART_KEY = "line-slipper-cart";
+const PRODUCT_PAGE_SIZE = 20;
 
 const state = {
   markets: [],
@@ -7,6 +8,7 @@ const state = {
   storeLayout: { blocks: [] },
   currentStoreTab: "store",
   currentCategoryId: "all",
+  productPage: 1,
   selectedVariants: {},
   openProductId: "",
   cart: readCart()
@@ -19,6 +21,8 @@ const subCategoryLandingEl = document.querySelector("#subCategoryLanding");
 const categoryTitleEl = document.querySelector("#categoryTitle");
 const marketDescriptionEl = document.querySelector("#marketDescription");
 const productsEl = document.querySelector("#products");
+const productPaginationEl = document.querySelector("#productPagination");
+const productPageSummaryEl = document.querySelector("#productPageSummary");
 const messageEl = document.querySelector("#message");
 const cartCountEl = document.querySelector("#cartCount");
 const productSearchEl = document.querySelector("#productSearch");
@@ -542,25 +546,57 @@ function renderCatalog() {
   renderStoreTabPanels();
 }
 
+function renderProductPagination(totalItems) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / PRODUCT_PAGE_SIZE));
+  state.productPage = Math.max(1, Math.min(state.productPage, totalPages));
+  productPageSummaryEl.textContent = totalItems
+    ? `第 ${state.productPage} / ${totalPages} 頁，共 ${totalItems} 件`
+    : "";
+  productPaginationEl.classList.toggle("hidden", totalPages <= 1);
+  if (totalPages <= 1) {
+    productPaginationEl.innerHTML = "";
+    return;
+  }
+
+  const current = state.productPage;
+  const numbers = new Set([1, totalPages, current - 1, current, current + 1]);
+  if (current === 1) numbers.add(3);
+  if (current === totalPages) numbers.add(totalPages - 2);
+  const pages = [...numbers].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b);
+  const buttons = pages.map((page, index) => {
+    const gap = index && page - pages[index - 1] > 1 ? '<span class="product-page-gap" aria-hidden="true">...</span>' : "";
+    return `${gap}<button type="button" data-product-page="${page}" aria-label="第 ${page} 頁" ${page === current ? 'aria-current="page"' : ""}>${page}</button>`;
+  }).join("");
+  productPaginationEl.innerHTML = `
+    <button type="button" data-product-page="${current - 1}" aria-label="上一頁" title="上一頁" ${current === 1 ? "disabled" : ""}><img class="product-page-previous" src="/assets/icons/arrow-right.svg" alt="" width="16" height="16"></button>
+    ${buttons}
+    <button type="button" data-product-page="${current + 1}" aria-label="下一頁" title="下一頁" ${current === totalPages ? "disabled" : ""}><img src="/assets/icons/arrow-right.svg" alt="" width="16" height="16"></button>
+  `;
+}
+
 function renderProducts() {
   const market = currentMarket();
   if (!market) {
+    renderProductPagination(0);
     productsEl.innerHTML = '<p class="empty">尚未建立賣場</p>';
     return;
   }
 
   if (market.products.length === 0) {
+    renderProductPagination(0);
     productsEl.innerHTML = '<p class="empty">目前沒有商品</p>';
     return;
   }
 
   const products = visibleProducts();
+  renderProductPagination(products.length);
   if (products.length === 0) {
     productsEl.innerHTML = '<p class="empty">沒有符合的商品</p>';
     return;
   }
 
-  productsEl.innerHTML = products.map((product) => {
+  const offset = (state.productPage - 1) * PRODUCT_PAGE_SIZE;
+  productsEl.innerHTML = products.slice(offset, offset + PRODUCT_PAGE_SIZE).map((product) => {
     const selected = selectedVariant(product);
     const imageUrl = productListImage(product);
     const disabled = !selected || selected.stock <= 0;
@@ -750,8 +786,23 @@ function addToCart(productId) {
 }
 
 document.addEventListener("click", (event) => {
+  const pageButton = event.target.closest("[data-product-page]");
+  if (pageButton && productPaginationEl.contains(pageButton)) {
+    if (pageButton.disabled) return;
+    const page = Number(pageButton.dataset.productPage);
+    const totalPages = Math.ceil(visibleProducts().length / PRODUCT_PAGE_SIZE);
+    if (!Number.isInteger(page) || page < 1 || page > totalPages || page === state.productPage) return;
+    state.productPage = page;
+    closeProductDetail();
+    renderProducts();
+    document.querySelector(".store-product-area")?.scrollIntoView({ behavior: "instant", block: "start" });
+    categoryTitleEl.focus({ preventScroll: true });
+    return;
+  }
+
   const tabButton = event.target.closest("[data-store-tab]");
   if (tabButton) {
+    state.productPage = 1;
     state.currentStoreTab = tabButton.dataset.storeTab || "store";
     closeProductDetail();
     if (["products", "categories"].includes(state.currentStoreTab)) {
@@ -765,6 +816,7 @@ document.addEventListener("click", (event) => {
 
   const categoryButton = event.target.closest("[data-open-category]");
   if (categoryButton) {
+    state.productPage = 1;
     state.currentCategoryId = categoryButton.dataset.openCategory;
     state.currentStoreTab = categoryDirectoryEl?.contains(categoryButton) ? "categories" : "products";
     state.selectedVariants = {};
@@ -845,11 +897,15 @@ document.addEventListener("keydown", (event) => {
 });
 
 productSearchEl.addEventListener("input", () => {
+  state.productPage = 1;
   state.currentStoreTab = "products";
   state.currentCategoryId = "all";
   closeProductDetail();
   renderCatalog();
 });
-productSortEl.addEventListener("change", renderProducts);
+productSortEl.addEventListener("change", () => {
+  state.productPage = 1;
+  renderProducts();
+});
 
 loadMarkets();

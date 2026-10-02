@@ -66,7 +66,8 @@
             <div class="shop-toolbar">
               <div>
                 <p class="eyebrow">FIND YOUR LITTLE JOY</p>
-                <h2 id="categoryTitle">全部商品</h2>
+                <h2 id="categoryTitle" tabindex="-1">全部商品</h2>
+                <p id="productPageSummary" class="product-page-summary" role="status" aria-live="polite"></p>
               </div>
               <label class="shop-sort">
                 <span>排序</span>
@@ -80,6 +81,7 @@
             <div>
               <div id="subCategoryLanding" class="sub-category-strip" aria-label="子分類"></div>
               <div id="products" class="product-grid shop-product-grid"></div>
+              <nav id="productPagination" class="product-pagination hidden" aria-label="商品分頁"></nav>
             </div>
           </div>
 

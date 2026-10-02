@@ -104,6 +104,15 @@
 .storefront-page .shop-product-body { padding: 16px 0; }
 .storefront-page .shop-product-body h3 { font-weight: 600; font-size: 16px; }
 .storefront-page .shop-product-meta strong { font-size: 21px; font-weight: 400; font-family: Georgia, serif; }
+.storefront-page .product-page-summary { margin: 7px 0 0; color: var(--store-muted); font-size: 12px; line-height: 1.5; }
+.storefront-page .product-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; max-width: 100%; margin: 28px 0 0; padding: 22px 0 0; border-top: 1px solid var(--store-line); }
+.storefront-page .product-pagination button { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 1px solid var(--store-line); border-radius: 3px; background: #fff; color: var(--store-ink); font-size: 13px; font-weight: 400; box-shadow: none; }
+.storefront-page .product-pagination button:hover:not(:disabled) { background: var(--store-blush); border-color: var(--store-petal); }
+.storefront-page .product-pagination button[aria-current="page"] { background: var(--store-rose); border-color: var(--store-rose); color: #fff; font-weight: 700; }
+.storefront-page .product-pagination button:disabled { opacity: .35; cursor: default; }
+.storefront-page .product-pagination img { display: block; flex: none; width: 16px; height: 16px; }
+.storefront-page .product-page-previous { transform: rotate(180deg); }
+.storefront-page .product-page-gap { flex: 0 0 14px; width: 14px; text-align: center; color: var(--store-muted); font-size: 12px; }
 .storefront-page .store-category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 18px; }
 .storefront-page .store-category-card { border: 0; border-radius: 0; padding: 0; box-shadow: none; background: #fff; }
 .storefront-page .store-category-card img { width: 100%; aspect-ratio: 1; object-fit: contain; }
@@ -189,6 +198,8 @@
   .storefront-page .shop-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
   .storefront-page .shop-product-body h3 { font-size: 14px; }
   .storefront-page .shop-product-meta strong { font-size: 18px; }
+  .storefront-page .product-pagination { gap: 2px; }
+  .storefront-page .product-pagination button { flex-basis: 32px; width: 32px; }
   .storefront-page .store-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .store-closing-note { flex-direction: column; gap: 10px; padding: 28px 20px; text-align: center; }
   .store-closing-note > span { font-size: 25px; }

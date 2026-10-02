@@ -164,5 +164,78 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   }
   assert.deepEqual(catalog.markets[0].products.map(item => item.id), originalIds, 'Display sorting must not reorder source data');
+  const pageProducts = Array.from({length: 125}, (_, index) => ({
+    ...stockProduct(`page-${index}`, [index + 1], [index % 3 ? 2 : 0]),
+    name: `Page item ${index}`
+  }));
+  catalog.markets[0].products = pageProducts;
+  layout.blocks = [{type: 'featured-products', title: 'Pagination test', limit: 4}];
+  const available = pageProducts.filter(item => item.variants[0].stock > 0);
+  const soldOut = pageProducts.filter(item => item.variants[0].stock === 0);
+  const pageOrder = [...available, ...soldOut].map(item => item.id);
+  const descendingOrder = [...available.toReversed(), ...soldOut.toReversed()].map(item => item.id);
+  const pageButton = number => page.locator(`#productPagination [aria-label="第 ${number} 頁"]`);
+  const nextPage = page.locator('#productPagination [aria-label="下一頁"]');
+  const previousPage = page.locator('#productPagination [aria-label="上一頁"]');
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 950});
+    await page.goto(base);
+    await page.locator('.store-strip-product-card').first().waitFor();
+    await page.locator('[data-store-tab="products"]').click();
+    assert.equal(await previousPage.isDisabled(), true);
+    const seen = [];
+    for (let number = 1; number <= 7; number++) {
+      const currentIds = await ids('#products .shop-product-card');
+      assert.equal(currentIds.length, number === 7 ? 5 : 20);
+      assert.equal(await pageButton(number).getAttribute('aria-current'), 'page');
+      assert.equal(await page.locator('#productPageSummary').textContent(), `第 ${number} / 7 頁，共 125 件`);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Pagination overflows at ${width}px, page ${number}`);
+      seen.push(...currentIds);
+      if (number < 7) await nextPage.click();
+    }
+    assert.deepEqual(seen, pageOrder, 'Sort all stock groups before pagination, with no missing or duplicate products');
+    assert.equal(await nextPage.isDisabled(), true);
+    await previousPage.click();
+    assert.deepEqual(await ids('#products .shop-product-card'), pageOrder.slice(100, 120));
+    await pageButton(1).click();
+    await pageButton(3).click();
+    await pageButton(4).click();
+    assert.equal(await page.locator('#productPagination .product-page-gap').count(), 2);
+    assert.equal(await page.evaluate(() => {
+      const nav = document.querySelector('#productPagination').getBoundingClientRect();
+      return Array.from(document.querySelectorAll('#productPagination > *')).every(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= nav.left && rect.right <= nav.right;
+      });
+    }), true, `Pagination controls fit at ${width}px`);
+    await page.locator('#productSort').selectOption('price-desc');
+    assert.equal(await pageButton(1).getAttribute('aria-current'), 'page');
+    assert.deepEqual(await ids('#products .shop-product-card'), descendingOrder.slice(0, 20));
+    await pageButton(7).click();
+    assert.deepEqual(await ids('#products .shop-product-card'), descendingOrder.slice(120));
+    await page.locator('#productSearch').fill('Page item 124');
+    assert.deepEqual(await ids('#products .shop-product-card'), ['page-124']);
+    assert.equal(await page.locator('#productPagination').isVisible(), false);
+    assert.equal(await page.locator('#productPageSummary').textContent(), '第 1 / 1 頁，共 1 件');
+    await page.locator('#productSearch').fill('no-pagination-match');
+    assert.equal(await page.locator('#productPagination').isVisible(), false);
+    assert.equal(await page.locator('#productPageSummary').textContent(), '');
+    await page.locator('#productSearch').fill('');
+    assert.equal(await pageButton(1).getAttribute('aria-current'), 'page');
+    await pageButton(2).click();
+    const detailId = descendingOrder[20];
+    await page.locator(`#products [data-open-product="${detailId}"]`).click();
+    await page.locator(`.product-detail-dialog [data-variant-id="${detailId}-0"]`).click();
+    await page.keyboard.press('Escape');
+    assert.equal(await pageButton(2).getAttribute('aria-current'), 'page', 'Viewing a product must preserve the current page');
+    await page.locator('[data-store-tab="categories"]').click();
+    await page.locator('.store-directory-row').first().click();
+    assert.equal(await pageButton(1).getAttribute('aria-current'), 'page');
+    await pageButton(2).click();
+    await page.locator('[data-store-tab="store"]').click();
+    await page.locator('[data-store-tab="products"]').click();
+    assert.equal(await pageButton(1).getAttribute('aria-current'), 'page');
+  }
+  assert.deepEqual(pageProducts.map(item => item.id), Array.from({length: 125}, (_, index) => `page-${index}`));
   assert.deepEqual(errors, []);
 });
