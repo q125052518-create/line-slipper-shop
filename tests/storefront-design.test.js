@@ -51,6 +51,10 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.setViewportSize({ width, height: 920 });
     await page.goto(base);
     await page.locator('.store-strip-product-card').first().waitFor();
+    const featuredPrice = page.locator('.store-item-price').first();
+    assert.doesNotMatch(await featuredPrice.textContent(), /NT|\$/);
+    assert.equal(await featuredPrice.evaluate(element => getComputedStyle(element).fontWeight), '700');
+    assert.doesNotMatch(await featuredPrice.evaluate(element => getComputedStyle(element).fontFamily), /Georgia/);
     assert.equal(await page.locator('#storeName').textContent(), catalog.markets[0].name);
     assert.equal(await page.locator('a[href*="shopee."]').count(), 0, 'No Shopee storefront links');
     assert.equal(await page.locator('.storefront-home').isVisible(), true, `Brand is hidden at ${width}px`);
@@ -82,6 +86,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     assert.equal(await page.locator('.product-detail-dialog').isVisible(), true);
     assert.equal(await page.locator('.product-detail-description p').textContent(), product.description || '精選商品');
     await page.locator(`[data-select-variant="${product.id}"][data-variant-id="${variant.id}"]`).last().click();
+    assert.equal(await page.locator('.product-detail-meta strong').textContent(), Number(variant.price).toLocaleString('zh-TW'));
     await page.locator('.product-detail-dialog [data-add-product]').click();
     assert.equal(await page.locator('#cartCount').textContent(), '1');
     await page.keyboard.press('Escape');
@@ -90,6 +95,8 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     assert.equal(await page.locator('#storeHero').isVisible(), false);
     assert.equal(await page.locator('#products [data-open-product]').count(), 1);
     assert.equal(await page.locator('#products .shop-product-body h3').textContent(), product.name);
+    assert.doesNotMatch(await page.locator('#products [data-price-line]').textContent(), /NT|\$/);
+    assert.equal(await page.locator('#products [data-price-line]').evaluate(element => getComputedStyle(element).fontWeight), '700');
     assert.equal(await page.locator('#products .shop-product-body > p:not(.shop-product-category)').count(), 0, 'Product cards show the title, not the description');
     await page.locator('#productSearch').fill('no-matching-product-012345');
     assert.equal(await page.locator('#products .empty').textContent(), '沒有符合的商品');
@@ -146,6 +153,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     assert.deepEqual(await ids('#products .shop-product-card'), defaultOrder);
     assert.equal(await page.locator('#products [data-open-product="mixed"] .soldout-badge').count(), 0, 'Another variant is still in stock');
     assert.equal(await page.locator('#products .soldout-badge').count(), 2);
+    assert.equal(await page.locator('#products [data-price-line="mixed"]').textContent(), '100\u2013120');
     await page.locator('#productSort').selectOption('price-asc');
     assert.deepEqual(await ids('#products .shop-product-card'), ['in-low', 'in-mid', 'mixed', 'out-low', 'out-high']);
     await page.locator('#productSort').selectOption('price-desc');

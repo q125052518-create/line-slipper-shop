@@ -77,7 +77,7 @@
 .storefront-page .store-strip-product-card strong { display: block; font-size: 17px; color: #48313e; font-weight: 600; line-height: 1.6; margin: 0 0 9px; overflow-wrap: anywhere; }
 .storefront-page .store-strip-product-card .store-item-options { color: #877680; font-size: 11px; line-height: 1.8; }
 .storefront-page .store-item-options > span { margin: 0 7px; color: #ceb6c2; }
-.storefront-page .store-strip-product-card .store-item-price { color: var(--store-rose); font-family: Georgia, "Microsoft JhengHei", serif; font-size: 20px; font-weight: 400; margin: 14px 0 0; line-height: 1.5; }
+.storefront-page .store-strip-product-card .store-item-price { color: var(--store-rose); font-family: Arial, "Microsoft JhengHei", sans-serif; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 14px 0 0; line-height: 1.4; overflow-wrap: anywhere; }
 .storefront-page .store-strip-product-card .store-item-action { display: flex; align-items: center; gap: 26px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid #cda7b8; color: #75465b; font-size: 12px; }
 .storefront-page .store-strip-product-card .store-item-action img { display: inline-block; width: 18px; height: 18px; aspect-ratio: auto; object-fit: contain; background: transparent; border-radius: 0; }
 .storefront-page .store-product-strip.is-single { display: block; max-width: 900px; margin: 0 auto; }
@@ -85,7 +85,7 @@
 .is-single .store-item-copy { padding: 0; }
 .storefront-page .is-single .store-item-category { font-size: 12px; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--store-line); }
 .storefront-page .is-single .store-strip-product-card strong { font-size: 29px; margin-bottom: 16px; }
-.storefront-page .is-single .store-strip-product-card .store-item-price { font-size: 27px; margin-top: 20px; }
+.storefront-page .is-single .store-strip-product-card .store-item-price { font-size: 24px; margin-top: 20px; }
 .storefront-page .is-single .store-item-action { margin-top: 24px; min-width: 170px; justify-content: space-between; }
 
 .storefront-page .storefront-shell { grid-template-columns: 180px minmax(0, 1fr); gap: 36px; padding-top: 22px; }
@@ -103,7 +103,7 @@
 .storefront-page .shop-product-card:hover { transform: none; box-shadow: none; }
 .storefront-page .shop-product-body { padding: 16px 0; }
 .storefront-page .shop-product-body h3 { font-weight: 600; font-size: 16px; }
-.storefront-page .shop-product-meta strong { font-size: 21px; font-weight: 400; font-family: Georgia, serif; }
+.storefront-page .shop-product-meta strong { min-width: 0; color: var(--store-rose); font-size: 20px; font-weight: 700; font-family: Arial, "Microsoft JhengHei", sans-serif; font-variant-numeric: tabular-nums; line-height: 1.4; overflow-wrap: anywhere; }
 .storefront-page .product-page-summary { margin: 7px 0 0; color: var(--store-muted); font-size: 12px; line-height: 1.5; }
 .storefront-page .product-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; max-width: 100%; margin: 28px 0 0; padding: 22px 0 0; border-top: 1px solid var(--store-line); }
 .storefront-page .product-pagination button { display: inline-flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 1px solid var(--store-line); border-radius: 3px; background: #fff; color: var(--store-ink); font-size: 13px; font-weight: 400; box-shadow: none; }
@@ -129,6 +129,7 @@
 .storefront-footer a { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
 .storefront-page .product-detail-dialog { border-radius: 6px; border-color: var(--store-line); }
 .storefront-page .product-detail-variant { border-radius: 3px; }
+.storefront-page .product-detail-meta strong { color: var(--store-rose); font-size: 24px; font-family: Arial, "Microsoft JhengHei", sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .storefront-page .product-detail-actions button { border-radius: 3px; background: var(--store-rose); }
 
 @media (min-width: 1800px) {

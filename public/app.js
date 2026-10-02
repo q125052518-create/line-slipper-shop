@@ -105,7 +105,7 @@ function currentMarket() {
 }
 
 function formatMoney(value) {
-  return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
+  return Number(value || 0).toLocaleString("zh-TW");
 }
 
 function escapeHtml(value) {
@@ -289,7 +289,7 @@ function visibleProducts() {
 function productPriceText(product) {
   const min = productMinPrice(product);
   const max = productMaxPrice(product);
-  return min === max ? formatMoney(min) : `${formatMoney(min)} - ${formatMoney(max)}`;
+  return min === max ? formatMoney(min) : `${formatMoney(min)}\u2013${formatMoney(max)}`;
 }
 
 function renderStoreHead() {
