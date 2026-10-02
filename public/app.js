@@ -15,6 +15,7 @@ const state = {
 };
 
 let cartPopupTimer = null;
+let productVariantResizeObserver = null;
 
 const categoryLandingEl = document.querySelector("#categoryLanding");
 const subCategoryLandingEl = document.querySelector("#subCategoryLanding");
@@ -657,8 +658,25 @@ function ensureProductDetailOverlay() {
 
 function closeProductDetail() {
   state.openProductId = "";
+  productVariantResizeObserver?.disconnect();
+  productVariantResizeObserver = null;
   document.querySelector("#productDetailOverlay")?.remove();
 }
+
+function fitProductVariantColumns(list) {
+  if (!list?.isConnected) return;
+  // Measure the real two-column labels, including image space and loaded fonts.
+  list.classList.remove("is-single-column");
+  const needsFullRow = Array.from(list.querySelectorAll(".product-detail-variant strong")).some((label) => {
+    const lineHeight = Number.parseFloat(getComputedStyle(label).lineHeight);
+    return label.getBoundingClientRect().height > lineHeight + 1 || label.scrollWidth > label.clientWidth + 1;
+  });
+  list.classList.toggle("is-single-column", needsFullRow);
+}
+
+document.fonts?.addEventListener("loadingdone", () => {
+  fitProductVariantColumns(document.querySelector("#productDetailOverlay .product-detail-variant-list"));
+});
 
 function openProductDetail(productId) {
   state.openProductId = productId;
@@ -681,6 +699,7 @@ function renderProductDetail(productId = state.openProductId) {
   const disabled = needsVariant || !selected || stock <= 0;
   const actionText = needsVariant ? "請選擇品項" : disabled ? "售完" : "加入購物車";
   const overlay = ensureProductDetailOverlay();
+  productVariantResizeObserver?.disconnect();
 
   overlay.innerHTML = `
     <div class="product-detail-backdrop" data-close-product-detail></div>
@@ -732,6 +751,15 @@ function renderProductDetail(productId = state.openProductId) {
       </div>
     </section>
   `;
+  const variantList = overlay.querySelector(".product-detail-variant-list");
+  fitProductVariantColumns(variantList);
+  let previousWidth = variantList.getBoundingClientRect().width;
+  productVariantResizeObserver = new ResizeObserver(([entry]) => {
+    if (Math.abs(entry.contentRect.width - previousWidth) < 0.5) return;
+    previousWidth = entry.contentRect.width;
+    fitProductVariantColumns(variantList);
+  });
+  productVariantResizeObserver.observe(variantList);
 }
 
 function addToCart(productId) {

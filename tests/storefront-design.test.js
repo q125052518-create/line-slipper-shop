@@ -12,7 +12,7 @@ const fixture = {
   categories: [{ id: 'cards', name: '卡膜卡套', isActive: true }],
   markets: [{ id: 'shop', name: '曜鑰購物', description: '卡膜卡套・出卡包材・活頁卡冊・飾品襪子', imageUrl: asset, products: [
     { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [
-      { id: 'pink', name: '粉色 / 加厚款 / 透明保護套', barcode: 'INTERNAL-SKU-001', price: 25, stock: 8, imageUrl: asset },
+      { id: 'pink', name: '粉色 / 加厚款 / 透明保護套 / 大尺寸收藏卡專用', barcode: 'INTERNAL-SKU-001', price: 25, stock: 8, imageUrl: asset },
       { id: 'white', name: '白色卡套+彈簧繩', barcode: 'INTERNAL-SKU-002', price: 25, stock: 0, imageUrl: asset },
       { id: 'gray', name: '灰色卡套+彈簧繩', barcode: 'INTERNAL-SKU-003', price: 25, stock: 2, imageUrl: asset },
       { id: 'black', name: '黑色卡套+彈簧繩', barcode: 'INTERNAL-SKU-004', price: 30, stock: 3, imageUrl: asset }
@@ -139,6 +139,44 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
       await page.screenshot({ path: path.join(process.env.STOREFRONT_SCREENSHOT_DIR, `products-${width}.png`), fullPage: true });
     }
     await page.evaluate(() => localStorage.clear());
+  }
+  const shortOptions = {...product, id: 'short-options', variants: ['小熊📣', '小貓📣', '小狗📣', '小兔📣', '狐狸📣', '小狼📣'].map((name, index) => ({...variant, id: `short-${index}`, name}))};
+  const longOptions = {...product, id: 'long-options', variants: ['白色卡套+彈簧繩', '灰色卡套+彈簧繩', '粉色卡套+彈簧繩', '黑色卡套+彈簧繩'].map((name, index) => ({...variant, id: `long-${index}`, name}))};
+  catalog.markets[0].products = [shortOptions, longOptions];
+  const expectVariantColumns = async count => {
+    await page.waitForFunction(expected => {
+      const list = document.querySelector('.product-detail-variant-list');
+      return list && getComputedStyle(list).gridTemplateColumns.trim().split(/\s+/).length === expected;
+    }, count);
+    assert.equal(await page.locator('.product-detail-variant-list').evaluate((element, columns) => {
+      const rects = Array.from(element.children).map(child => child.getBoundingClientRect());
+      return rects.every((rect, index) => {
+        const priorRow = rects[index - columns];
+        const rowFirst = rects[index - index % columns];
+        return Math.abs(rect.top - rowFirst.top) < 1 && (!priorRow || rect.top >= priorRow.bottom + 7);
+      });
+    }, count), true);
+  };
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 950});
+    await page.goto(base);
+    await page.locator('.store-strip-product-card[data-open-product="short-options"] .store-item-image').click();
+    await expectVariantColumns(width === 320 ? 1 : 2);
+    await page.locator('.product-detail-variant[data-variant-id="short-1"]').click();
+    await expectVariantColumns(width === 320 ? 1 : 2);
+    await page.keyboard.press('Escape');
+    await page.locator('.store-strip-product-card[data-open-product="long-options"] .store-item-image').click();
+    await expectVariantColumns(1);
+    await page.locator('.product-detail-variant[data-variant-id="long-1"]').click();
+    await expectVariantColumns(1);
+    await page.setViewportSize({width: 768, height: 950});
+    await expectVariantColumns(2);
+    await page.setViewportSize({width, height: 950});
+    await expectVariantColumns(1);
+    await page.keyboard.press('Escape');
+    await page.locator('.store-strip-product-card[data-open-product="short-options"] .store-item-image').click();
+    await expectVariantColumns(width === 320 ? 1 : 2);
+    await page.keyboard.press('Escape');
   }
   catalog.markets[0].products = Array.from({ length: 6 }, (_, index) => ({ ...product, id: `grid-${index}`, name: `Grid item ${index + 1}` }));
   await page.setViewportSize({ width: 1440, height: 900 });
