@@ -287,9 +287,7 @@ function visibleProducts() {
 }
 
 function productPriceText(product) {
-  const min = productMinPrice(product);
-  const max = productMaxPrice(product);
-  return min === max ? formatMoney(min) : `${formatMoney(min)}\u2013${formatMoney(max)}`;
+  return formatMoney(productMinPrice(product));
 }
 
 function renderStoreHead() {
