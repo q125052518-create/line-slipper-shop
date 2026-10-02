@@ -427,7 +427,6 @@ function renderLayoutProductBlock(block, products = layoutProductsForBlock(block
               <strong>${escapeHtml(product.name)}</strong>
               <span class="store-item-options">${(product.variants || []).length} 款規格 <span aria-hidden="true">/</span> ${productTotalStock(product) > 0 ? "有庫存" : "暫時售完"}</span>
               <span class="store-item-price">${escapeHtml(productPriceText(product))}</span>
-              <span class="store-item-action">查看商品 <img src="/assets/icons/arrow-right.svg" alt="" width="18" height="18"></span>
             </span>
           </button>
         `).join("") || '<p class="empty">目前沒有商品</p>'}

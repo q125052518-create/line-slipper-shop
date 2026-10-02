@@ -78,15 +78,12 @@
 .storefront-page .store-strip-product-card .store-item-options { color: #877680; font-size: 11px; line-height: 1.8; }
 .storefront-page .store-item-options > span { margin: 0 7px; color: #ceb6c2; }
 .storefront-page .store-strip-product-card .store-item-price { color: var(--store-rose); font-family: Arial, "Microsoft JhengHei", sans-serif; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 14px 0 0; line-height: 1.4; overflow-wrap: anywhere; }
-.storefront-page .store-strip-product-card .store-item-action { display: flex; align-items: center; gap: 26px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid #cda7b8; color: #75465b; font-size: 12px; }
-.storefront-page .store-strip-product-card .store-item-action img { display: inline-block; width: 18px; height: 18px; aspect-ratio: auto; object-fit: contain; background: transparent; border-radius: 0; }
 .storefront-page .store-product-strip.is-single { display: block; max-width: 900px; margin: 0 auto; }
 .storefront-page .is-single .store-strip-product-card { display: grid; grid-template-columns: minmax(240px, 330px) minmax(0, 1fr); align-items: center; gap: 70px; padding: 0; }
 .is-single .store-item-copy { padding: 0; }
 .storefront-page .is-single .store-item-category { font-size: 12px; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--store-line); }
 .storefront-page .is-single .store-strip-product-card strong { font-size: 29px; margin-bottom: 16px; }
 .storefront-page .is-single .store-strip-product-card .store-item-price { font-size: 24px; margin-top: 20px; }
-.storefront-page .is-single .store-item-action { margin-top: 24px; min-width: 170px; justify-content: space-between; }
 
 .storefront-page .storefront-shell { grid-template-columns: 180px minmax(0, 1fr); gap: 36px; padding-top: 22px; }
 .storefront-page .store-sidebar { padding: 0 22px 0 0; border: 0; border-right: 1px solid var(--store-line); border-radius: 0; box-shadow: none; background: transparent; }
@@ -188,7 +185,6 @@
   .storefront-page .is-single .store-item-category { font-size: 10px; padding-bottom: 8px; margin-bottom: 8px; }
   .storefront-page .is-single .store-strip-product-card strong { font-size: 22px; margin-bottom: 6px; }
   .storefront-page .is-single .store-strip-product-card .store-item-price { font-size: 21px; margin-top: 9px; }
-  .storefront-page .is-single .store-strip-product-card .store-item-action { min-width: 0; width: 100%; margin-top: 14px; gap: 12px; padding-bottom: 7px; font-size: 11px; }
   .storefront-page .storefront-shell { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-top: 16px; }
   .storefront-page .store-sidebar { display: none; }
   .storefront-page .shop-toolbar { padding-bottom: 18px; gap: 10px; }

@@ -51,6 +51,8 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.setViewportSize({ width, height: 920 });
     await page.goto(base);
     await page.locator('.store-strip-product-card').first().waitFor();
+    assert.equal(await page.locator('.store-item-action').count(), 0, 'Product cards have no redundant view-product action');
+    assert.equal(await page.locator('.store-item-copy').first().evaluate(element => element.lastElementChild.classList.contains('store-item-price')), true);
     const featuredPrice = page.locator('.store-item-price').first();
     assert.match(await featuredPrice.textContent(), /^\$[\d,]+$/);
     assert.equal(await featuredPrice.evaluate(element => getComputedStyle(element).fontWeight), '700');
@@ -82,7 +84,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
       await fs.mkdir(process.env.STOREFRONT_SCREENSHOT_DIR, { recursive: true });
       await page.screenshot({ path: path.join(process.env.STOREFRONT_SCREENSHOT_DIR, `home-${width}.png`), fullPage: true });
     }
-    await page.locator('.store-strip-product-card').first().click();
+    await page.locator('.store-strip-product-card .store-item-image').first().click();
     assert.equal(await page.locator('.product-detail-dialog').isVisible(), true);
     assert.equal(await page.locator('.product-detail-description p').textContent(), product.description || '精選商品');
     await page.locator(`[data-select-variant="${product.id}"][data-variant-id="${variant.id}"]`).last().click();
@@ -141,6 +143,7 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.goto(base);
     await page.locator('.store-strip-product-card').first().waitFor();
     assert.equal(await page.locator('.store-strip-product-card').count(), 3);
+    assert.equal(await page.locator('.store-item-action').count(), 0, `${type} has no redundant action row`);
     assert.equal(await page.locator('.store-strip-product-card[data-open-product="mixed"] .store-item-price').textContent(), '$100');
     assert((await ids('.store-strip-product-card')).every(id => !id.startsWith('out-')), `${type} must prioritize stock before applying its limit`);
   }
