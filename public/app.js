@@ -105,7 +105,7 @@ function currentMarket() {
 }
 
 function formatMoney(value) {
-  return Number(value || 0).toLocaleString("zh-TW");
+  return `$${Number(value || 0).toLocaleString("zh-TW")}`;
 }
 
 function escapeHtml(value) {
