@@ -1196,25 +1196,23 @@ h1 {
 }
 
 .product-detail-variant img {
+  flex: none;
   width: 42px;
 }
 
 .product-detail-variant span {
   display: grid;
-  gap: 2px;
+  flex: 1;
   min-width: 0;
+  white-space: normal;
 }
 
-.product-detail-variant strong,
-.product-detail-variant small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.product-detail-variant small {
-  color: #65716b;
-  font-size: 11px;
+.product-detail-variant strong {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .product-detail-meta {

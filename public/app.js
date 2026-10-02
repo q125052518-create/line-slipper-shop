@@ -618,7 +618,7 @@ function renderProducts() {
                   class="shop-variant-chip ${isSelected ? "is-selected" : ""}"
                   data-select-variant="${escapeHtml(product.id)}"
                   data-variant-id="${escapeHtml(variant.id)}"
-                  title="${escapeHtml(`${variant.name} ${variant.barcode}`)}"
+                  title="${escapeHtml(variant.name)}"
                 >
                   <img src="${escapeHtml(variantImage)}" alt="">
                   <span>${escapeHtml(variant.name)}</span>
@@ -710,12 +710,11 @@ function renderProductDetail(productId = state.openProductId) {
                   class="shop-variant-chip product-detail-variant ${isSelected ? "is-selected" : ""}"
                   data-select-variant="${escapeHtml(product.id)}"
                   data-variant-id="${escapeHtml(variant.id)}"
-                  title="${escapeHtml(`${variant.name} ${variant.barcode}`)}"
+                  title="${escapeHtml(variant.name)}"
                 >
                   <img src="${escapeHtml(variantImage)}" alt="">
                   <span>
                     <strong>${escapeHtml(variant.name)}</strong>
-                    <small>${escapeHtml(variant.barcode || "")}</small>
                   </span>
                 </button>
               `;

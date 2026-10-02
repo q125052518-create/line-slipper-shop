@@ -11,7 +11,7 @@ const asset = '/assets/store/brand-avatar.jpg';
 const fixture = {
   categories: [{ id: 'cards', name: '卡膜卡套', isActive: true }],
   markets: [{ id: 'shop', name: '曜鑰購物', description: '卡膜卡套・出卡包材・活頁卡冊・飾品襪子', imageUrl: asset, products: [
-    { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [{ id: 'pink', name: '粉色', price: 25, stock: 8, imageUrl: asset }] }
+    { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [{ id: 'pink', name: '粉色 / 加厚款 / 透明保護套', barcode: 'INTERNAL-SKU-001', price: 25, stock: 8, imageUrl: asset }] }
   ] }]
 };
 const layoutFixture = { blocks: [
@@ -87,10 +87,22 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.locator('.store-strip-product-card .store-item-image').first().click();
     assert.equal(await page.locator('.product-detail-dialog').isVisible(), true);
     assert.equal(await page.locator('.product-detail-description p').textContent(), product.description || '精選商品');
+    const option = page.locator(`.product-detail-variant[data-variant-id="${variant.id}"]`);
+    assert.equal(await option.locator('small').count(), 0, 'Buyer options must not show a barcode row');
+    assert.equal(await option.getAttribute('title'), variant.name, 'Option tooltip shows only the name');
+    assert.equal(await option.locator('strong').textContent(), variant.name);
+    assert.equal(await option.locator('strong').evaluate(element => getComputedStyle(element).fontSize), '22px');
+    assert.equal(await option.evaluate(element => {
+      const label = element.querySelector('strong');
+      const rect = label.getBoundingClientRect();
+      const button = element.getBoundingClientRect();
+      return label.scrollWidth <= label.clientWidth + 1 && rect.right <= button.right && rect.left >= button.left && rect.bottom <= button.bottom;
+    }), true, `Large option names wrap inside their button at ${width}px`);
     await page.locator(`[data-select-variant="${product.id}"][data-variant-id="${variant.id}"]`).last().click();
     assert.equal(await page.locator('.product-detail-meta strong').textContent(), `$${Number(variant.price).toLocaleString('zh-TW')}`);
     await page.locator('.product-detail-dialog [data-add-product]').click();
     assert.equal(await page.locator('#cartCount').textContent(), '1');
+    assert.equal(await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('line-slipper-cart')))[0].barcode), variant.barcode, 'Internal barcode is still retained for checkout');
     await page.keyboard.press('Escape');
     await page.locator('#productSearch').fill(product.name);
     assert.equal(await page.locator('#productShell').isVisible(), true);
