@@ -11,7 +11,12 @@ const asset = '/assets/store/brand-avatar.jpg';
 const fixture = {
   categories: [{ id: 'cards', name: '卡膜卡套', isActive: true }],
   markets: [{ id: 'shop', name: '曜鑰購物', description: '卡膜卡套・出卡包材・活頁卡冊・飾品襪子', imageUrl: asset, products: [
-    { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [{ id: 'pink', name: '粉色 / 加厚款 / 透明保護套', barcode: 'INTERNAL-SKU-001', price: 25, stock: 8, imageUrl: asset }] }
+    { id: 'sleeve', name: '透明小卡保護套', description: '商品詳細說明僅顯示於詳細頁。'.repeat(30), categoryId: 'cards', imageUrl: asset, variants: [
+      { id: 'pink', name: '粉色 / 加厚款 / 透明保護套', barcode: 'INTERNAL-SKU-001', price: 25, stock: 8, imageUrl: asset },
+      { id: 'white', name: '白色卡套+彈簧繩', barcode: 'INTERNAL-SKU-002', price: 25, stock: 0, imageUrl: asset },
+      { id: 'gray', name: '灰色卡套+彈簧繩', barcode: 'INTERNAL-SKU-003', price: 25, stock: 2, imageUrl: asset },
+      { id: 'black', name: '黑色卡套+彈簧繩', barcode: 'INTERNAL-SKU-004', price: 30, stock: 3, imageUrl: asset }
+    ] }
   ] }]
 };
 const layoutFixture = { blocks: [
@@ -87,6 +92,13 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.locator('.store-strip-product-card .store-item-image').first().click();
     assert.equal(await page.locator('.product-detail-dialog').isVisible(), true);
     assert.equal(await page.locator('.product-detail-description p').textContent(), product.description || '精選商品');
+    assert.equal(await page.locator('.product-detail-variant').count(), product.variants.length);
+    assert.equal(await page.locator('.product-detail-variant-list').evaluate(element => {
+      const list = element.getBoundingClientRect();
+      const options = Array.from(element.children).map(option => option.getBoundingClientRect());
+      return options.every((rect, index) => Math.abs(rect.left - list.left) < 1 && Math.abs(rect.width - list.width) < 1
+        && (!index || rect.top >= options[index - 1].bottom + 7));
+    }), true, `Each option occupies a full row at ${width}px`);
     const option = page.locator(`.product-detail-variant[data-variant-id="${variant.id}"]`);
     assert.equal(await option.locator('small').count(), 0, 'Buyer options must not show a barcode row');
     assert.equal(await option.getAttribute('title'), variant.name, 'Option tooltip shows only the name');

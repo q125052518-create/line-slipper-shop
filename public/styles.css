@@ -1185,7 +1185,7 @@ h1 {
 .product-detail-variant-list {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .product-detail-variant {
