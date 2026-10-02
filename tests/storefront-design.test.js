@@ -201,6 +201,10 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await pageButton(3).click();
     await pageButton(4).click();
     assert.equal(await page.locator('#productPagination .product-page-gap').count(), 2);
+    await page.locator('#categoryTitle').hover();
+    const currentPageColor = await pageButton(4).evaluate(element => getComputedStyle(element).backgroundColor);
+    await pageButton(4).hover();
+    assert.equal(await pageButton(4).evaluate(element => getComputedStyle(element).backgroundColor), currentPageColor, 'Current page keeps its contrast on hover');
     assert.equal(await page.evaluate(() => {
       const nav = document.querySelector('#productPagination').getBoundingClientRect();
       return Array.from(document.querySelectorAll('#productPagination > *')).every(element => {
