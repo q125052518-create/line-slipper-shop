@@ -516,7 +516,7 @@ function renderStoreTabPanels() {
 
 function renderSubCategories() {
   const children = state.currentCategoryId === "all"
-    ? childCategories("")
+    ? []
     : childCategories(state.currentCategoryId);
 
   if (!children.length) {

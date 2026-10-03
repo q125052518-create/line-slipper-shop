@@ -118,6 +118,8 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.keyboard.press('Escape');
     await page.locator('#productSearch').fill(product.name);
     assert.equal(await page.locator('#productShell').isVisible(), true);
+    assert.equal(await page.locator('#subCategoryLanding').isVisible(), false, 'Root categories must not be repeated above all products');
+    assert.equal(await page.locator('#subCategoryLanding [data-open-category]').count(), 0);
     assert.equal(await page.locator('#storeHero').isVisible(), false);
     assert.equal(await page.locator('#products [data-open-product]').count(), 1);
     assert.equal(await page.locator('#products .shop-product-body h3').textContent(), product.name);
@@ -135,6 +137,17 @@ test('storefront brand, search, category tabs and guest cart work across viewpor
     await page.locator('.store-hero-button').click();
     assert.equal(await page.locator('#storeHero').isVisible(), false);
     assert.equal(await page.locator('#products [data-open-product]').count(), 1);
+    assert.equal(await page.locator('#subCategoryLanding').isVisible(), false);
+    assert.equal(await page.locator('.store-sidebar').isVisible(), width > 900);
+    if (width > 900) {
+      const category = catalog.categories.find(category => category.id === product.categoryId);
+      assert(category);
+      await page.locator(`#categoryLanding [data-open-category="${category.id}"]`).click();
+      assert.equal(await page.locator('#categoryTitle').textContent(), category.name);
+      assert.equal(await page.locator('#products [data-open-product]').count(), 1);
+      await page.locator('#categoryLanding [data-open-category="all"]').click();
+      assert.equal(await page.locator('#subCategoryLanding').isVisible(), false);
+    }
     if (process.env.STOREFRONT_SCREENSHOT_DIR) {
       await page.screenshot({ path: path.join(process.env.STOREFRONT_SCREENSHOT_DIR, `products-${width}.png`), fullPage: true });
     }
