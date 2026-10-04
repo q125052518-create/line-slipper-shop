@@ -16,6 +16,8 @@ const cartEl = document.querySelector("#cart");
 const subtotalEl = document.querySelector("#subtotal");
 const shippingFeeEl = document.querySelector("#shippingFee");
 const totalEl = document.querySelector("#total");
+const roundingRowEl = document.querySelector("#roundingRow");
+const roundingAdjustmentEl = document.querySelector("#roundingAdjustment");
 const formEl = document.querySelector("#orderForm");
 const messageEl = document.querySelector("#message");
 const deliveryMethodEl = document.querySelector("#deliveryMethod");
@@ -88,7 +90,7 @@ function cartItems() {
 }
 
 function cartSubtotal() {
-  return cartItems().reduce((sum, [, item]) => sum + item.price * item.quantity, 0);
+  return cartItems().reduce((sum, [, item]) => sum + Math.round(item.price * 100) * item.quantity, 0) / 100;
 }
 
 function currentShippingFee() {
@@ -100,9 +102,14 @@ function currentShippingFee() {
 function renderTotals() {
   const subtotal = cartSubtotal();
   const shippingFee = currentShippingFee();
+  const unroundedCents = Math.round(subtotal * 100) + Math.round(shippingFee * 100);
+  const totalAmount = Math.round(unroundedCents / 100);
+  const roundingAdjustment = (totalAmount * 100 - unroundedCents) / 100;
   if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
   if (shippingFeeEl) shippingFeeEl.textContent = formatMoney(shippingFee);
-  totalEl.textContent = formatMoney(subtotal + shippingFee);
+  roundingRowEl?.classList.toggle("hidden", roundingAdjustment === 0);
+  if (roundingAdjustmentEl) roundingAdjustmentEl.textContent = `${roundingAdjustment > 0 ? "+" : ""}${formatMoney(roundingAdjustment)}`;
+  totalEl.textContent = formatMoney(totalAmount);
 }
 
 function saveCheckoutDraft() {

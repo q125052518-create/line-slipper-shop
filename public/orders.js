@@ -98,6 +98,7 @@ function renderOrders(orders) {
         <div><dt>地址</dt><dd>${escapeHtml(order.deliveryAddress || "-")}</dd></div>
         <div><dt>7-11 門市</dt><dd>${escapeHtml(formatSevenElevenStore(order))}</dd></div>
         <div><dt>運費</dt><dd>${formatMoney(order.shippingFee || 0)}</dd></div>
+        ${order.roundingAdjustment ? `<div><dt>四捨五入調整</dt><dd>${formatMoney(order.roundingAdjustment)}</dd></div>` : ""}
       </dl>
 
       <div class="buyer-order-items">

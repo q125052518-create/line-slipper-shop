@@ -6,7 +6,7 @@ import path from "path";
 import XLSX from "xlsx";
 import { fileURLToPath } from "url";
 import { imageValue, productMedia, productMetadata, catalogRevision, parseImportRows, applyProductImport } from "./scripts/product-fields.js";
-import { normalizePromotion, variantPricing, storefrontProduct } from "./scripts/product-pricing.js";
+import { normalizePromotion, variantPricing, storefrontProduct, orderTotals } from "./scripts/product-pricing.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1312,6 +1312,7 @@ function publicOrderView(order) {
     productTotal: order.productTotal || Math.max(0, Number(order.totalAmount || 0) - Number(order.shippingFee || 0)),
     shippingFee: order.shippingFee || 0,
     totalAmount: order.totalAmount || 0,
+    roundingAdjustment: order.roundingAdjustment || 0,
     status: order.status || "pending",
     cancelRequest: normalizeCancelRequest(order.cancelRequest),
     canCancel: canBuyerRequestCancelOrder(order),
@@ -1982,6 +1983,30 @@ app.put("/api/admin/products/bulk-category", async (req, res) => {
   if (moved.length === 0) return res.status(404).json({ message: "找不到可移動的商品" });
   await writeCatalog(catalog);
   res.json({ movedCount: moved.length, categoryId });
+});
+
+app.put("/api/admin/products/bulk-promotion", async (req, res) => {
+  const catalog = await readCatalog();
+  if (!req.body.expectedRevision || req.body.expectedRevision !== catalogRevision(catalog)) {
+    return res.status(409).json({ message: "商品資料已更新，請重新讀取後再設定折扣" });
+  }
+  const productIds = Array.isArray(req.body.productIds) ? req.body.productIds.map((id) => String(id || "").trim()) : [];
+  if (!productIds.length || productIds.some((id) => !id) || new Set(productIds).size !== productIds.length) {
+    return res.status(400).json({ message: "請提供不重複的商品 ID" });
+  }
+  const byId = new Map(catalog.markets.flatMap((market) => market.products).map((product) => [product.id, product]));
+  if (productIds.some((id) => !byId.has(id))) return res.status(404).json({ message: "找不到指定商品，尚未套用折扣" });
+  try {
+    const promotion = normalizePromotion(req.body.promotion);
+    for (const id of productIds) {
+      if (promotion) byId.get(id).promotion = { ...promotion };
+      else delete byId.get(id).promotion;
+    }
+    await writeCatalog(catalog);
+    res.json({ updatedCount: productIds.length, productIds, promotion, revision: catalogRevision(catalog) });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
 app.put("/api/admin/products/:productId/promotion", async (req, res) => {
@@ -4385,7 +4410,7 @@ app.post("/api/orders", async (req, res) => {
         barcode: found.variant.barcode,
         ...pricing,
         quantity,
-        subtotal: pricing.price * quantity
+        subtotal: Math.round(pricing.price * 100) * quantity / 100
       };
     });
   } catch (error) {
@@ -4398,9 +4423,9 @@ app.post("/api/orders", async (req, res) => {
   }
   await writeCatalog(catalog);
 
-  const productTotal = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const shippingFee = cleanDeliveryMethod === sevenElevenDeliveryMethod ? sevenElevenShippingFee : 0;
-  const totalAmount = productTotal + shippingFee;
+  const { productTotal, shippingFee, totalAmount, roundingAdjustment } = orderTotals(
+    normalizedItems, cleanDeliveryMethod === sevenElevenDeliveryMethod ? sevenElevenShippingFee : 0
+  );
   const order = {
     id: `ORD-${Date.now()}`,
     buyerId: buyer?.id || "",
@@ -4419,6 +4444,7 @@ app.post("/api/orders", async (req, res) => {
     productTotal,
     shippingFee,
     totalAmount,
+    roundingAdjustment,
     status: "pending",
     mallbic: {
       importStatus: "pending",
