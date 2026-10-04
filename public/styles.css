@@ -1235,6 +1235,44 @@ h1 {
   font-size: 14px;
 }
 
+.price-pair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 9px;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.price-pair > .price-original {
+  color: #8b7c83;
+  font-size: 0.72em;
+  font-weight: 400;
+  text-decoration-thickness: 1px;
+  white-space: nowrap;
+}
+
+.price-pair > .price-sale {
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.price-pair > .price-discount {
+  color: #a93058;
+  background: #fce9ef;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font: 600 11px/1.4 Arial, "Microsoft JhengHei", sans-serif;
+  white-space: nowrap;
+}
+
+.product-detail-meta > strong > .price-pair {
+  color: inherit;
+  font: inherit;
+}
+
 .product-detail-actions {
   display: grid;
   gap: 10px;

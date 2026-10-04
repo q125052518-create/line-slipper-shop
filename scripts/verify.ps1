@@ -115,7 +115,7 @@ if (-not $node) {
         $code = $LASTEXITCODE
         Add-Check ("node-syntax:{0}" -f $relativePath) ($code -eq 0) $(if ($code -eq 0) { "Syntax OK" } else { $output })
     }
-    $testOutput = (& node.exe --test (Join-Path $root "tests\guest-checkout.test.js") (Join-Path $root "tests\storefront-design.test.js") (Join-Path $root "tests\product-import-template.test.js") (Join-Path $root "tests\product-editor.test.js") (Join-Path $root "tests\myship-login-window.test.js") (Join-Path $root "tests\myship-phone.test.js") 2>&1 | Out-String).Trim()
+    $testOutput = (& node.exe --test (Join-Path $root "tests\guest-checkout.test.js") (Join-Path $root "tests\storefront-design.test.js") (Join-Path $root "tests\product-import-template.test.js") (Join-Path $root "tests\product-editor.test.js") (Join-Path $root "tests\product-promotion.test.js") (Join-Path $root "tests\myship-login-window.test.js") (Join-Path $root "tests\myship-phone.test.js") 2>&1 | Out-String).Trim()
     $testCode = $LASTEXITCODE
     Add-Check "storefront-and-myship-regression-tests" ($testCode -eq 0) $(if ($testCode -eq 0) { "Guest checkout passed with isolated temporary data; MyShip safety tests passed; no production data or external order calls" } else { $testOutput })
 }

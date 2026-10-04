@@ -238,6 +238,7 @@ function refreshCartFromCatalog() {
       variantName: found.variant.name,
       barcode: found.variant.barcode,
       price: found.variant.price,
+      originalPrice: found.variant.originalPrice,
       stock: found.variant.stock,
       imageUrl: found.variant.imageUrl || found.product.imageUrl,
       quantity: Math.min(cartItem.quantity, found.variant.stock)
@@ -266,7 +267,7 @@ function renderCart() {
         <strong>${escapeHtml(item.productName)}</strong>
         <span>${escapeHtml(item.variantName)} / ${escapeHtml(item.barcode)}</span>
         <span>${escapeHtml(item.marketName)}</span>
-        <span>${formatMoney(item.price)} / 雙，庫存 ${item.stock}</span>
+        <span class="price-pair">${item.originalPrice > item.price ? `<del class="price-original">${formatMoney(item.originalPrice)}</del>` : ""}<span class="price-sale">${formatMoney(item.price)}</span><span> / 雙，庫存 ${item.stock}</span></span>
       </div>
       <div class="quantity">
         <button type="button" data-minus="${key}">-</button>

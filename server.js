@@ -6,6 +6,7 @@ import path from "path";
 import XLSX from "xlsx";
 import { fileURLToPath } from "url";
 import { imageValue, productMedia, productMetadata, catalogRevision, parseImportRows, applyProductImport } from "./scripts/product-fields.js";
+import { normalizePromotion, variantPricing, storefrontProduct } from "./scripts/product-pricing.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1099,6 +1100,7 @@ function normalizeProduct(input, existingId) {
   const media = productMedia(input);
   const description = String(input.description || "").trim();
   const variants = Array.isArray(input.variants) ? input.variants : [];
+  const promotion = normalizePromotion(input.promotion);
 
   if (!name) throw new Error("請填寫商品名稱");
   if (variants.length === 0) throw new Error("請至少建立一個品項");
@@ -1110,6 +1112,7 @@ function normalizeProduct(input, existingId) {
     categoryId,
     ...media,
     ...productMetadata(input),
+    ...(promotion ? { promotion } : {}),
     description,
     variants: variants.map((variant) => normalizeVariant(variant, variant.id))
   };
@@ -1729,7 +1732,7 @@ app.get("/api/markets", async (_req, res) => {
   const activeMarkets = catalog.markets.filter((market) => market.isActive !== false);
   res.json({
     categories: catalog.categories.filter((category) => category.isActive !== false),
-    markets: (activeMarkets.length ? activeMarkets : catalog.markets.slice(0, 1)).map((market) => ({ ...market, products: market.products.filter((p) => p.isActive !== false) }))
+    markets: (activeMarkets.length ? activeMarkets : catalog.markets.slice(0, 1)).map((market) => ({ ...market, products: market.products.filter((p) => p.isActive !== false).map(storefrontProduct) }))
   });
 });
 
@@ -1979,6 +1982,24 @@ app.put("/api/admin/products/bulk-category", async (req, res) => {
   if (moved.length === 0) return res.status(404).json({ message: "找不到可移動的商品" });
   await writeCatalog(catalog);
   res.json({ movedCount: moved.length, categoryId });
+});
+
+app.put("/api/admin/products/:productId/promotion", async (req, res) => {
+  const catalog = await readCatalog();
+  if (!req.body.expectedRevision || req.body.expectedRevision !== catalogRevision(catalog)) {
+    return res.status(409).json({ message: "商品資料已更新，請重新讀取後再設定折扣" });
+  }
+  const product = catalog.markets.flatMap((market) => market.products).find((entry) => entry.id === req.params.productId);
+  if (!product) return res.status(404).json({ message: "找不到商品" });
+  try {
+    const promotion = normalizePromotion(req.body.promotion);
+    if (promotion) product.promotion = promotion;
+    else delete product.promotion;
+    await writeCatalog(catalog);
+    res.json({ product, revision: catalogRevision(catalog) });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
 app.put("/api/admin/products/:productId", async (req, res) => {
@@ -4351,6 +4372,7 @@ app.post("/api/orders", async (req, res) => {
       if (found.variant.stock < quantity) {
         throw new Error(`${found.product.name} - ${found.variant.name} 庫存不足，目前剩 ${found.variant.stock}`);
       }
+      const pricing = variantPricing(found.product, found.variant);
 
       return {
         marketId: found.market.id,
@@ -4361,9 +4383,9 @@ app.post("/api/orders", async (req, res) => {
         variantName: found.variant.name,
         variantImageUrl: found.variant.imageUrl || found.product.imageUrl || "",
         barcode: found.variant.barcode,
-        price: found.variant.price,
+        ...pricing,
         quantity,
-        subtotal: found.variant.price * quantity
+        subtotal: pricing.price * quantity
       };
     });
   } catch (error) {

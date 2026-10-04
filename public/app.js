@@ -291,6 +291,16 @@ function productPriceText(product) {
   return formatMoney(productMinPrice(product));
 }
 
+function productPriceHtml(product, selected = null) {
+  const variant = selected || [...(product.variants || [])].sort((a, b) => a.price - b.price || (a.originalPrice ?? a.price) - (b.originalPrice ?? b.price))[0];
+  if (!variant || !(Number(variant.originalPrice) > Number(variant.price))) {
+    return selected ? formatMoney(selected.price) : productPriceText(product);
+  }
+  const percent = Number(variant.pricePercent);
+  const discountLabel = percent >= 10 && percent % 10 ? percent : percent / 10;
+  return `<span class="price-pair"><del class="price-original" aria-label="原價 ${formatMoney(variant.originalPrice)}">${formatMoney(variant.originalPrice)}</del><span class="price-sale" aria-label="折扣價 ${formatMoney(variant.price)}">${formatMoney(variant.price)}</span><span class="price-discount">${discountLabel}折</span></span>`;
+}
+
 function renderStoreHead() {
   const market = currentMarket();
   const productCount = marketProducts().length;
@@ -427,7 +437,7 @@ function renderLayoutProductBlock(block, products = layoutProductsForBlock(block
               ${categoryById(product.categoryId) ? `<span class="store-item-category">${escapeHtml(categoryName(product.categoryId))}</span>` : ""}
               <strong>${escapeHtml(product.name)}</strong>
               <span class="store-item-options">${(product.variants || []).length} 款規格 <span aria-hidden="true">/</span> ${productTotalStock(product) > 0 ? "有庫存" : "暫時售完"}</span>
-              <span class="store-item-price">${escapeHtml(productPriceText(product))}</span>
+              <span class="store-item-price">${productPriceHtml(product)}</span>
             </span>
           </button>
         `).join("") || '<p class="empty">目前沒有商品</p>'}
@@ -628,7 +638,7 @@ function renderProducts() {
             }).join("")}
           </div>
           <div class="shop-product-meta">
-            <strong data-price-line="${escapeHtml(product.id)}">${productPriceText(product)}</strong>
+            <strong data-price-line="${escapeHtml(product.id)}">${productPriceHtml(product)}</strong>
             <span data-stock-line="${escapeHtml(product.id)}">庫存 ${selected?.stock ?? 0}</span>
           </div>
           <div class="shop-product-actions">
@@ -740,7 +750,7 @@ function renderProductDetail(productId = state.openProductId) {
             }).join("") : '<p class="empty">尚未建立品項</p>'}
           </div>
           <div class="product-detail-meta">
-            <strong>${selected ? formatMoney(selected.price) : productPriceText(product)}</strong>
+            <strong>${productPriceHtml(product, selected)}</strong>
             <span>庫存 ${stock}</span>
           </div>
           <div class="product-detail-actions">
@@ -799,6 +809,7 @@ function addToCart(productId) {
     variantName: variant.name,
     barcode: variant.barcode,
     price: variant.price,
+    originalPrice: variant.originalPrice,
     stock: variant.stock,
     imageUrl: variant.imageUrl || product.imageUrl,
     quantity: currentQuantity + addQuantity
