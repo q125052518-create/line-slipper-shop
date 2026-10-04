@@ -1031,7 +1031,7 @@ h1 {
   font-size: 18px;
 }
 
-.shop-product-meta span {
+.shop-product-meta > span {
   color: #65716b;
   font-size: 12px;
 }
@@ -1066,7 +1066,7 @@ h1 {
   margin-top: 2px;
 }
 
-.shop-product-card .shop-product-meta span {
+.shop-product-card .shop-product-meta > span {
   display: none;
 }
 
@@ -1230,7 +1230,7 @@ h1 {
   font-size: 26px;
 }
 
-.product-detail-meta span {
+.product-detail-meta > span {
   color: #65716b;
   font-size: 14px;
 }

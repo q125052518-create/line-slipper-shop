@@ -75,8 +75,12 @@ test("one-product promotion applies consistently to listing, cart and server che
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await page.goto(base);
+  await page.locator('#storeProductCount').getByText('2', { exact: true }).waitFor();
   await page.locator('[data-store-tab="products"]').click();
   const card = page.locator('#products [data-open-product="p1"]');
+  assert.equal(await card.locator('.price-sale').isVisible(), true);
+  assert.equal(await card.locator('.price-original').isVisible(), true);
+  assert.equal(await card.locator('.price-discount').isVisible(), true);
   assert.equal(await card.locator(".price-original").textContent(), "$129");
   assert.equal(await card.locator(".price-sale").textContent(), "$110");
   assert.equal(await card.locator(".price-discount").textContent(), "85折");
